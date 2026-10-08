@@ -6,6 +6,25 @@ const parkingList = $('parking-list');
 let data = null;
 let loading = false;
 let timer = null;
+let activeFilter = 'all';
+const openDetails = new Set();
+const mobileRefresh = $('mobile-refresh');
+const known = p => Number.isFinite(p.curravacnt) && p.curravacnt >= 0;
+function resetStats() {
+  for (const id of ['stat-total', 'stat-available', 'stat-full', 'stat-unknown']) $(id).textContent = '—';
+  $('result-count').textContent = '';
+}
+function resetFilters() {
+  $('search').value = '';
+  activeFilter = 'all';
+  updateFilterButtons();
+  render();
+}
+function updateFilterButtons() {
+  document.querySelectorAll('[data-filter]').forEach(button => {
+    button.setAttribute('aria-pressed', String(button.dataset.filter === activeFilter));
+  });
+}
 const normalize = text => String(text ?? '').normalize('NFKC').toLowerCase().replace(/공영주차장|공영|도시철도/g, '').replace(/[\s(),，（）]/g, '');
 const value = text => text === null || text === undefined || text === '' ? '정보 없음' : String(text);
 const number = n => n === null || n === undefined ? '확인 불가' : `${Number(n).toLocaleString('ko-KR')}대`;
@@ -42,24 +61,66 @@ function date(text) {
   return value(text);
 }
 function render() {
+  $('clear-search').hidden = !$('search').value;
   if (!data) return;
+  const all = data.parkingList;
+  $('stat-total').textContent = all.length;
+  $('stat-available').textContent = all.filter(p => known(p) && p.curravacnt > 0).length;
+  $('stat-full').textContent = all.filter(p => known(p) && p.curravacnt === 0).length;
+  $('stat-unknown').textContent = all.filter(p => !known(p)).length;
   const query = normalize($('search').value);
-  const items = data.parkingList.filter(p => normalize(p.parknm).includes(query) || normalize(p.pkNam).includes(query));
-  items.sort((a,b) => {
+  const items = all.filter(p => {
+    const match = normalize(p.parknm).includes(query) || normalize(p.pkNam).includes(query);
+    const state = !known(p) ? 'unknown' : p.curravacnt === 0 ? 'full' : 'available';
+    return match && (activeFilter === 'all' || activeFilter === state);
+  });
+  items.sort((a, b) => {
     if ($('sort').value === 'available') {
-      const diff = (b.curravacnt ?? -1) - (a.curravacnt ?? -1);
+      const diff = (known(b) ? b.curravacnt : -1) - (known(a) ? a.curravacnt : -1);
       if (diff) return diff;
     }
-    return a.parknm.localeCompare(b.parknm, 'ko');
+    return String(a.parknm ?? '').localeCompare(String(b.parknm ?? ''), 'ko');
   });
   const fragment = document.createDocumentFragment();
   for (const p of items) {
+    const unknown = !known(p);
+    const state = unknown ? 'unknown' : p.curravacnt === 0 ? 'full' : '';
     const card = element('li', undefined, 'card');
-    card.append(element('h2', p.parknm), element('span', `시설공단 코드 ${p.parkgcd}`, 'code'));
-    const unknown = p.curravacnt === null;
-    card.append(element('p', unknown ? '빈자리 확인 불가' : p.curravacnt === 0 ? '만차 · 빈자리 0대' : `주차 가능 ${number(p.curravacnt)}`, `availability${unknown ? ' unknown' : p.curravacnt === 0 ? ' full' : ''}`));
-    card.append(element('p', `현재 주차 ${number(p.parkingcnt)} · 전체 ${number(p.maxcnt)}`, 'meta'));
-    card.append(element('p', `실시간 갱신: ${date(p.lastupdatetime)}`, 'meta'));
+    const top = element('div', undefined, 'card-top');
+    top.append(element('h3', value(p.parknm)), element('span', unknown ? '확인 불가' : p.curravacnt === 0 ? '만차' : '주차 가능', `badge ${state}`));
+    card.append(top);
+    const address = element('p', value(p.doroAddr ?? p.jibunAddr), 'address-preview');
+    address.append(element('small', '주소 · 공공데이터 기준'));
+    card.append(address);
+    const count = element('p', undefined, `space-count ${state}`);
+    count.append(element('span', '주차 가능한 빈자리'), element('strong', unknown ? '확인 불가' : String(p.curravacnt)));
+    if (!unknown) count.append(element('small', '대'));
+    card.append(count);
+    if (!unknown && Number.isFinite(p.maxcnt) && p.maxcnt > 0 && p.curravacnt <= p.maxcnt) {
+      const meter = element('div', undefined, 'meter');
+      meter.setAttribute('aria-hidden', 'true');
+      const fill = element('span');
+      fill.style.width = `${p.curravacnt / p.maxcnt * 100}%`;
+      meter.append(fill);
+      card.append(meter);
+    }
+    card.append(element('p', `현재 주차 ${number(p.parkingcnt)} / 전체 ${number(p.maxcnt)}`, 'capacity'));
+    card.append(element('p', `제공기관 갱신 · ${date(p.lastupdatetime)}`, 'card-update'));
+    const link = element('a', '카카오맵에서 위치 확인 ↗', 'map-link');
+    link.href = `https://map.kakao.com/link/search/${encodeURIComponent(`부산 ${p.parknm}`)}`;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.setAttribute('aria-label', `${p.parknm} 카카오맵에서 위치 확인 (새 창)`);
+    card.append(link);
+    const details = element('details', undefined, 'card-details');
+    const key = String(p.parkgcd ?? p.parknm);
+    details.open = openDetails.has(key);
+    details.addEventListener('toggle', () => {
+      if (details.isConnected) {
+        if (details.open) openDetails.add(key); else openDetails.delete(key);
+      }
+    });
+    details.append(element('summary', '요금·운영시간·상세정보'));
     const dl = element('dl');
     row(dl, '주소(공공데이터 기준)', p.doroAddr ?? p.jibunAddr);
     row(dl, '기본요금', fee(p.pkBascTime, p.tenMin));
@@ -69,32 +130,35 @@ function render() {
     row(dl, '공휴일 운영', hours(p.hldSrtTe, p.hldEndTe));
     row(dl, '관리기관', p.guNm);
     row(dl, '기본정보 기준일', p.fnlDt);
-    card.append(dl);
-    card.append(element('p', p.basicMatched ? `기본정보 연결: ${p.matchMethod === 'alias' ? '별칭' : '정규화 이름'} · ${value(p.pkNam)}` : p.matchStatus === 'ambiguous' ? '기본정보: 중복 후보가 있어 확인 필요' : '기본정보: 연결된 자료 없음', 'meta'));
-    if (p.dataIssues?.length) card.append(element('p', p.dataIssues.join(' '), 'warning'));
-    card.append(element(
-      'p',
-      '주소는 공공데이터 기준이며 실제 위치와 다를 수 있습니다. 지도보기에서 위치를 확인하세요.',
-      'meta'
-    ));
-
-    const mapQuery = `부산 ${p.parknm}`;
-    const link = element('a', '카카오맵에서 위치 확인', 'map-link');
-    link.href = `https://map.kakao.com/link/search/${encodeURIComponent(mapQuery)}`;
-    link.target = '_blank';
-    link.rel = 'noopener noreferrer';
-    card.append(link);
+    row(dl, '시설공단 코드', p.parkgcd);
+    details.append(dl);
+    details.append(element('p', p.basicMatched ? `기본정보 연결: ${p.matchMethod === 'alias' ? '별칭' : '정규화 이름'} · ${value(p.pkNam)}` : p.matchStatus === 'ambiguous' ? '기본정보: 중복 후보가 있어 확인 필요' : '기본정보: 연결된 자료 없음', 'meta'));
+    if (p.dataIssues?.length) details.append(element('p', p.dataIssues.join(' '), 'warning'));
+    details.append(element('p', '주소는 공공데이터 기준이며 실제 위치와 다를 수 있습니다. 지도보기에서 위치를 확인하세요.', 'meta'));
+    card.append(details);
     fragment.append(card);
   }
-  if (!items.length) fragment.append(element('li', '검색 결과가 없습니다. 다른 주차장 이름을 입력해 주세요.', 'card'));
+  if (!items.length) {
+    const empty = element('li', undefined, 'card empty-state');
+    empty.append(element('h3', '조건에 맞는 주차장이 없어요'), element('p', '검색어를 바꾸거나 전체 목록을 확인해 보세요.'));
+    const reset = element('button', '전체 목록 보기');
+    reset.type = 'button';
+    reset.addEventListener('click', resetFilters);
+    empty.append(reset);
+    fragment.append(empty);
+  }
   parkingList.replaceChildren(fragment);
-  if (!statusText.classList.contains('error')) statusText.textContent = `${data.totalCount}곳 중 ${items.length}곳 표시`;
+  $('result-count').textContent = `${items.length}곳`;
+  if (!statusText.classList.contains('error')) statusText.textContent = `${all.length}곳 중 ${items.length}곳 표시 · 빈자리 수는 도착 시 달라질 수 있습니다.`;
 }
 async function loadParkingList() {
   if (!navigator.onLine) { showOffline(); return; }
   if (loading) return;
   loading = true;
   loadButton.disabled = true;
+  mobileRefresh.disabled = true;
+  loadButton.textContent = '조회 중…';
+  mobileRefresh.textContent = '조회 중…';
   parkingList.setAttribute('aria-busy','true');
   statusText.className = '';
   statusText.textContent = '주차장 정보를 불러오는 중입니다.';
@@ -106,7 +170,12 @@ async function loadParkingList() {
     if (!navigator.onLine) { showOffline(); return; }
     data = next;
     $('warnings').textContent = (data.warnings ?? []).join(' ');
+    $('connection-status').hidden = true;
     const fetched = data.sources?.realtime?.fetchedAt;
+    const fetchedDate = fetched ? new Date(fetched) : null;
+    $('last-checked').textContent = fetchedDate && !Number.isNaN(fetchedDate.getTime())
+      ? `마지막 조회 ${fetchedDate.toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })} · 한국시간`
+      : '실시간 조회 실패 · 각 주차장의 제공기관 갱신시간을 확인하세요.';
     $('summary').textContent = `기본정보 연결 ${data.matchedCount}곳 / 미연결 ${data.unmatchedCount}곳 · 마지막 조회 ${fetched ? new Date(fetched).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }) : '실시간 조회 실패'} (한국시간)`;
     render();
   } catch (error) {
@@ -115,7 +184,11 @@ async function loadParkingList() {
     statusText.textContent = error.name === 'TimeoutError' ? '응답이 지연됩니다. 잠시 후 다시 시도해 주세요.' : error.message;
     if (data) statusText.textContent += ' 이전 결과를 유지합니다. 갱신시간을 확인해 주세요.';
   } finally {
-    loading = false; loadButton.disabled = false;
+    loading = false;
+    loadButton.disabled = false;
+    mobileRefresh.disabled = false;
+    loadButton.textContent = '↻ 새로고침';
+    mobileRefresh.textContent = '↻ 새로고침';
     parkingList.setAttribute('aria-busy','false');
   }
 }
@@ -123,6 +196,19 @@ $('search-form').addEventListener('submit', event => { event.preventDefault(); r
 $('search').addEventListener('input', render);
 $('sort').addEventListener('change', render);
 loadButton.addEventListener('click', loadParkingList);
+mobileRefresh.addEventListener('click', loadParkingList);
+$('clear-search').addEventListener('click', () => {
+  $('search').value = '';
+  render();
+  $('search').focus();
+});
+document.querySelectorAll('[data-filter]').forEach(button => {
+  button.addEventListener('click', () => {
+    activeFilter = button.dataset.filter;
+    updateFilterButtons();
+    render();
+  });
+});
 $('auto-refresh').addEventListener('change', () => {
   clearInterval(timer);
   timer = $('auto-refresh').checked ? setInterval(() => { if (!document.hidden) loadParkingList(); }, 300000) : null;
@@ -133,6 +219,8 @@ loadParkingList();
 function showOffline() {
   data = null;
   parkingList.replaceChildren();
+  resetStats();
+  $('last-checked').textContent = '오프라인 · 실시간 조회 불가';
   $('warnings').textContent = '';
   $('summary').textContent = '';
   statusText.className = 'error';
@@ -155,7 +243,8 @@ const standalone = window.matchMedia('(display-mode: standalone)');
 function updateInstallState() {
   const installed = standalone.matches || navigator.standalone === true;
   installButton.hidden = installed || !installPrompt;
-  if (installed) installHelp.textContent = '홈 화면에서 앱처럼 실행 중입니다.';
+  $('install-panel').hidden = installed;
+  document.querySelector('.header-link').hidden = installed;
 }
 window.addEventListener('beforeinstallprompt', event => {
   event.preventDefault();

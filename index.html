@@ -2,46 +2,61 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="theme-color" content="#1565c0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#123c38">
+  <meta name="description" content="부산시설공단 공영주차장의 빈자리, 요금, 운영시간을 확인하고 카카오맵으로 위치를 찾아보세요.">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="icon-192.png">
-  <title>부산 공영주차장</title>
+  <title>부산주차장 · 빈자리 찾기</title>
   <link rel="stylesheet" href="style.css">
   <script src="app.js" defer></script>
 </head>
 <body>
+  <a class="skip-link" href="#search">주차장 검색으로 이동</a>
+  <header class="site-header" id="top">
+    <div class="header-inner">
+      <a class="brand" href="./" aria-label="부산주차장 홈"><span class="brand-mark" aria-hidden="true">P</span><span>부산주차장<small>BUSAN PARKING</small></span></a>
+      <span class="header-caption">부산의 주차, 조금 더 편하게</span>
+      <a class="header-link" href="#install-panel">홈 화면에 추가 ↗</a>
+    </div>
+  </header>
   <main class="container">
-    <header>
-      <p class="eyebrow">BUSAN PARKING</p>
-      <h1>부산 공영주차장</h1>
-      <p>시설공단 주차장의 빈자리와 주소·요금·운영시간을 확인하세요.</p>
-    </header>
-    <section class="install-panel" aria-label="홈 화면 설치 안내">
-      <p>홈 화면에 추가하면 앱처럼 사용할 수 있습니다.</p>
-      <button id="install-button" type="button" hidden>앱처럼 설치하기</button>
-      <p id="install-help" class="note">Android·PC는 브라우저 메뉴의 설치 또는 홈 화면 추가를 이용하세요. iPhone은 Safari의 공유 메뉴 → 홈 화면에 추가를 선택하세요.</p>
+    <section class="hero" aria-labelledby="hero-title">
+      <div><p class="eyebrow">가까운 일상, 편리한 주차</p><h1 id="hero-title">주차할 곳,<br class="mobile-only"> 미리 확인하세요.</h1><p class="hero-description">부산시설공단 공영주차장의 빈자리부터 위치 확인까지.</p></div>
+      <div class="hero-label"><span class="status-dot" aria-hidden="true"></span>제공기관 갱신 기준<span>실제 빈자리는 현장에서 달라질 수 있어요.</span></div>
     </section>
-    <p id="connection-status" class="warning" role="status" aria-live="polite" hidden></p>
-    <section class="panel" aria-label="주차장 검색">
-      <form id="search-form">
-        <label for="search">주차장 이름 검색</label>
-        <div class="search-row">
-          <input id="search" type="search" placeholder="예: 화명, 장산역" autocomplete="off">
-          <button type="submit">검색</button>
-        </div>
+    <section class="stats" aria-label="전체 주차장 현황">
+      <div><span>조회 주차장</span><strong id="stat-total">—</strong><small>곳</small></div>
+      <div class="positive"><span>빈자리 있는 곳</span><strong id="stat-available">—</strong><small>곳</small></div>
+      <div><span>만차</span><strong id="stat-full">—</strong><small>곳</small></div>
+      <div><span>빈자리 확인 불가</span><strong id="stat-unknown">—</strong><small>곳</small></div>
+    </section>
+    <p id="connection-status" class="notice warning" role="status" aria-live="polite" hidden></p>
+    <section class="search-panel" aria-label="주차장 검색 및 필터">
+      <form id="search-form" role="search">
+        <label for="search">어느 주차장을 찾으세요?</label>
+        <div class="search-row"><input id="search" type="search" placeholder="주차장 이름 검색 · 예: 화명, 장산역" autocomplete="off"><button id="clear-search" class="clear-button" type="button" aria-label="검색어 지우기" hidden>×</button><button type="submit" class="search-button">검색</button></div>
       </form>
-      <div class="toolbar">
-        <label for="sort">정렬 <select id="sort"><option value="available" selected>빈자리 많은 순</option><option value="name">이름순</option></select></label>
-        <button id="load-button" type="button">새로고침</button>
-        <label class="auto"><input id="auto-refresh" type="checkbox"> 5분마다 자동갱신</label>
+      <div class="filter-row">
+        <div class="filter-group" role="group" aria-label="빈자리 상태 필터">
+          <button type="button" data-filter="all" aria-pressed="true">전체</button>
+          <button type="button" data-filter="available" aria-pressed="false">주차 가능</button>
+          <button type="button" data-filter="full" aria-pressed="false">만차</button>
+          <button type="button" data-filter="unknown" aria-pressed="false">확인 불가</button>
+        </div>
+        <label class="sort-label" for="sort">정렬<select id="sort"><option value="available" selected>빈자리 많은 순</option><option value="name">이름순</option></select></label>
       </div>
-      <p id="status" role="status" aria-live="polite">주차장 정보를 불러옵니다.</p>
-      <p id="warnings" class="warning" role="status"></p>
-      <p id="summary" class="note"></p>
     </section>
-    <ul id="parking-list" aria-label="주차장 검색 결과" aria-busy="false"></ul>
-    <p class="note">실시간 현황 출처: 부산시설공단 · 기본정보 출처: 부산광역시<br>빈자리는 제공기관 갱신 시점의 정보입니다. 요금·운영시간은 기준일을 확인하고 현장 안내를 우선해 주세요.</p>
+    <section class="results" aria-labelledby="results-title">
+      <div class="results-heading"><div><h2 id="results-title">주차장 목록 <span id="result-count"></span></h2><p id="last-checked" class="note">인터넷 연결 후 주차 정보를 조회합니다.</p></div><div class="refresh-controls"><label class="auto"><input id="auto-refresh" type="checkbox">5분 자동갱신</label><button id="load-button" type="button" class="secondary-button">↻ 새로고침</button></div></div>
+      <p id="status" role="status" aria-live="polite">주차장 정보를 불러오는 중입니다.</p>
+      <p id="warnings" class="notice warning" role="status"></p>
+      <ul id="parking-list" aria-label="주차장 검색 결과" aria-busy="false"></ul>
+      <details class="data-info"><summary>데이터 출처와 이용 안내</summary><p id="summary" class="note"></p><p class="note">실시간 현황: 부산시설공단 · 기본정보: 부산광역시<br>빈자리는 제공기관 갱신 시점의 정보입니다. 요금·운영시간은 기준일을 확인하고 현장 안내를 우선해 주세요. 주소는 공공데이터 기준이며 실제 위치와 다를 수 있습니다. 카카오맵에서 위치를 확인하세요.</p></details>
+    </section>
+    <section id="install-panel" class="install-panel" aria-label="홈 화면 설치 안내"><div class="install-icon" aria-hidden="true">P</div><div class="install-copy"><h2>다음엔 홈 화면에서 바로</h2><p>부산주차장을 앱처럼 편하게 열어보세요.</p><details id="install-instructions"><summary>설치 방법 보기</summary><p id="install-help">Android·PC: 브라우저 메뉴 → 앱 설치 또는 홈 화면에 추가.<br>iPhone: Safari 공유 메뉴 → 홈 화면에 추가.<br>카카오톡 등 앱 안에서 열었다면 Chrome이나 Safari로 다시 접속하세요.</p></details></div><button id="install-button" type="button" hidden>앱처럼 설치하기</button></section>
+    <footer class="site-footer"><span>부산주차장 <small>BUSAN PARKING</small></span><a href="#top">맨 위로 ↑</a></footer>
   </main>
+  <nav class="mobile-bar" aria-label="빠른 메뉴"><a href="#search">⌕ 검색하기</a><button id="mobile-refresh" type="button">↻ 새로고침</button><a href="#top">↑ 맨 위로</a></nav>
 </body>
 </html>
