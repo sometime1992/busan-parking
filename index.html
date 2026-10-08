@@ -3,6 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#1565c0">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icon-192.png">
   <title>부산 공영주차장</title>
   <link rel="stylesheet" href="style.css">
   <script src="app.js" defer></script>
@@ -14,6 +17,12 @@
       <h1>부산 공영주차장</h1>
       <p>시설공단 주차장의 빈자리와 주소·요금·운영시간을 확인하세요.</p>
     </header>
+    <section class="install-panel" aria-label="홈 화면 설치 안내">
+      <p>홈 화면에 추가하면 앱처럼 사용할 수 있습니다.</p>
+      <button id="install-button" type="button" hidden>앱처럼 설치하기</button>
+      <p id="install-help" class="note">Android·PC는 브라우저 메뉴의 설치 또는 홈 화면 추가를 이용하세요. iPhone은 Safari의 공유 메뉴 → 홈 화면에 추가를 선택하세요.</p>
+    </section>
+    <p id="connection-status" class="warning" role="status" aria-live="polite" hidden></p>
     <section class="panel" aria-label="주차장 검색">
       <form id="search-form">
         <label for="search">주차장 이름 검색</label>

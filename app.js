@@ -91,6 +91,7 @@ function render() {
   if (!statusText.classList.contains('error')) statusText.textContent = `${data.totalCount}곳 중 ${items.length}곳 표시`;
 }
 async function loadParkingList() {
+  if (!navigator.onLine) { showOffline(); return; }
   if (loading) return;
   loading = true;
   loadButton.disabled = true;
@@ -102,12 +103,14 @@ async function loadParkingList() {
     const next = await response.json();
     if (!response.ok) throw new Error(next.message || '정보를 불러오지 못했습니다.');
     if (!Array.isArray(next.parkingList)) throw new Error('응답 형식을 확인해 주세요.');
+    if (!navigator.onLine) { showOffline(); return; }
     data = next;
     $('warnings').textContent = (data.warnings ?? []).join(' ');
     const fetched = data.sources?.realtime?.fetchedAt;
     $('summary').textContent = `기본정보 연결 ${data.matchedCount}곳 / 미연결 ${data.unmatchedCount}곳 · 마지막 조회 ${fetched ? new Date(fetched).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }) : '실시간 조회 실패'} (한국시간)`;
     render();
   } catch (error) {
+    if (!navigator.onLine) { showOffline(); return; }
     statusText.className = 'error';
     statusText.textContent = error.name === 'TimeoutError' ? '응답이 지연됩니다. 잠시 후 다시 시도해 주세요.' : error.message;
     if (data) statusText.textContent += ' 이전 결과를 유지합니다. 갱신시간을 확인해 주세요.';
@@ -125,3 +128,80 @@ $('auto-refresh').addEventListener('change', () => {
   timer = $('auto-refresh').checked ? setInterval(() => { if (!document.hidden) loadParkingList(); }, 300000) : null;
 });
 loadParkingList();
+
+// 오프라인에서는 이전 빈자리를 현재 정보로 표시하지 않습니다.
+function showOffline() {
+  data = null;
+  parkingList.replaceChildren();
+  $('warnings').textContent = '';
+  $('summary').textContent = '';
+  statusText.className = 'error';
+  statusText.textContent = '인터넷 연결 후 새로고침해 주세요.';
+  const notice = $('connection-status');
+  notice.hidden = false;
+  notice.textContent = '오프라인 상태입니다. 실시간 주차 정보를 확인할 수 없습니다.';
+}
+window.addEventListener('offline', showOffline);
+window.addEventListener('online', () => {
+  $('connection-status').hidden = true;
+  loadParkingList();
+});
+
+// 설치 요청은 사용자가 버튼을 눌렀을 때만 표시합니다.
+const installButton = $('install-button');
+const installHelp = $('install-help');
+let installPrompt = null;
+const standalone = window.matchMedia('(display-mode: standalone)');
+function updateInstallState() {
+  const installed = standalone.matches || navigator.standalone === true;
+  installButton.hidden = installed || !installPrompt;
+  if (installed) installHelp.textContent = '홈 화면에서 앱처럼 실행 중입니다.';
+}
+window.addEventListener('beforeinstallprompt', event => {
+  event.preventDefault();
+  installPrompt = event;
+  updateInstallState();
+});
+installButton.addEventListener('click', async () => {
+  if (!installPrompt) return;
+  const prompt = installPrompt;
+  installPrompt = null;
+  installButton.hidden = true;
+  try {
+    await prompt.prompt();
+    const result = await prompt.userChoice;
+    installHelp.textContent = result.outcome === 'accepted'
+      ? '설치 요청을 완료했습니다. 기기의 설치 진행 상황을 확인하세요.'
+      : '나중에 브라우저 메뉴에서 설치 또는 홈 화면 추가를 선택할 수 있습니다.';
+  } catch {
+    installHelp.textContent = '브라우저 메뉴에서 설치 또는 홈 화면 추가를 선택하세요.';
+  }
+});
+window.addEventListener('appinstalled', () => {
+  installPrompt = null;
+  installButton.hidden = true;
+  installHelp.textContent = '설치되었습니다. 홈 화면 아이콘으로 실행할 수 있습니다.';
+});
+standalone.addEventListener('change', updateInstallState);
+updateInstallState();
+
+// 새 버전 활성화 시 한 번만 새로고침합니다.
+if ('serviceWorker' in navigator) {
+  let refreshing = false;
+  let hadController = Boolean(navigator.serviceWorker.controller);
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController) { hadController = true; return; }
+    if (refreshing) return;
+    refreshing = true;
+    window.location.reload();
+  });
+  navigator.serviceWorker.register('./service-worker.js', { updateViaCache: 'none' })
+    .then(registration => {
+      document.addEventListener('visibilitychange', () => {
+        if (!document.hidden && navigator.onLine) registration.update().catch(() => {});
+      });
+    })
+    .catch(() => {
+      installHelp.textContent += ' 오프라인 실행 준비에 실패했습니다. 인터넷 연결 후 새로고침해 주세요.';
+    });
+}
