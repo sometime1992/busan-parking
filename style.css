@@ -146,3 +146,13 @@ dt { color: var(--muted); } dd { margin: 0; }
   .install-qr img { width: 164px; height: 164px; }
   .install-copy .qr-steps { line-height: 1.8; }
 }
+
+.qr-install-dialog { width: min(420px, calc(100% - 32px)); max-height: calc(100dvh - 48px); overflow: auto; border: 1px solid var(--line); border-radius: 20px; padding: 30px 24px; color: var(--ink); text-align: center; background: #fff; }
+.qr-install-dialog::backdrop { background: #102e29b3; }
+.dialog-app-icon { display: grid; place-items: center; width: 64px; height: 64px; margin: 0 auto 16px; border-radius: 18px; background: #123c38; color: #caead1; font-size: 40px; font-weight: 800; }
+.qr-install-dialog h2 { font-size: 22px; margin: 8px 0; letter-spacing: -.04em; }
+#qr-install-description { font-size: 14px; color: var(--muted); margin-bottom: 22px; }
+#qr-install-button { width: 100%; min-height: 48px; font-size: 16px; }
+.qr-install-manual { text-align: left; border-top: 1px solid var(--line); margin-top: 18px; padding-top: 12px; }
+.qr-install-manual p { line-height: 1.9; }
+.dialog-later { width: 100%; background: #f0f4ef; color: var(--ink); margin-top: 18px; font-size: 13px; min-height: 44px; }

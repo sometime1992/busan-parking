@@ -11,9 +11,9 @@
   <link rel="stylesheet" href="style.css">
   <script src="app.js" defer></script>
 </head>
-<body>
+<body id="top">
   <a class="skip-link" href="#search">주차장 검색으로 이동</a>
-  <header class="site-header" id="top">
+  <header class="site-header">
     <div class="header-inner">
       <a class="brand" href="./" aria-label="부산주차장 홈"><span class="brand-mark" aria-hidden="true">P</span><span>부산주차장<small>BUSAN PARKING</small></span></a>
       <span class="header-caption">부산의 주차, 조금 더 편하게</span>
@@ -59,18 +59,28 @@
       <div class="install-copy">
         <h2>휴대폰에서도 편하게, 부산주차장</h2>
         <p>휴대폰 카메라로 QR코드를 찍어 사이트를 열어보세요.</p>
-        <p class="qr-steps">① QR 스캔 → ② 사이트 접속 → ③ 앱 설치 또는 홈 화면에 추가</p>
+        <p class="qr-steps">① QR 스캔 → ② 설치 안내 → ③ 설치 확인</p>
         <button id="install-button" type="button" hidden>앱처럼 설치하기</button>
         <details id="install-instructions"><summary>설치 방법 보기</summary><p id="install-help">Android: Chrome에서 사이트를 연 뒤 ‘앱처럼 설치하기’ 또는 메뉴 → 앱 설치 / 홈 화면에 추가.<br>iPhone: Safari 공유 메뉴 → 홈 화면에 추가.<br>PC: 브라우저의 설치 버튼이나 메뉴를 이용하세요.<br>카카오톡 등 앱 안에서 열었다면 Chrome이나 Safari로 다시 접속하세요.</p></details>
       </div>
       <figure class="install-qr">
-        <a href="https://busan-parking-3m4.pages.dev/" aria-label="부산주차장 설치 페이지 열기"><img src="install-qr.png" width="164" height="164" alt="휴대폰으로 부산주차장 사이트를 열기 위한 QR코드" loading="lazy"></a>
+        <a href="https://busan-parking-3m4.pages.dev/?install=1" aria-label="부산주차장 설치 페이지 열기"><img src="install-qr.png" width="164" height="164" alt="휴대폰으로 부산주차장 사이트를 열기 위한 QR코드" loading="lazy"></a>
         <figcaption>휴대폰 카메라로 스캔</figcaption>
-        <a class="qr-open-link" href="https://busan-parking-3m4.pages.dev/">이 휴대폰에서 사이트 열기 ↗</a>
+        <a class="qr-open-link" href="https://busan-parking-3m4.pages.dev/?install=1">이 휴대폰에서 사이트 열기 ↗</a>
       </figure>
     </section>
     <footer class="site-footer"><span>부산주차장 <small>BUSAN PARKING</small></span><a href="#top">맨 위로 ↑</a></footer>
   </main>
+  <dialog id="qr-install-dialog" class="qr-install-dialog" aria-labelledby="qr-install-title" aria-describedby="qr-install-description">
+    <div class="dialog-app-icon" aria-hidden="true">P</div>
+    <p class="eyebrow">BUSAN PARKING</p>
+    <h2 id="qr-install-title">부산주차장을 설치할까요?</h2>
+    <p id="qr-install-description">홈 화면 아이콘으로 주차장 빈자리와 위치를 바로 확인하세요.</p>
+    <button id="qr-install-button" type="button" hidden>설치하기</button>
+    <p id="qr-install-status" class="note" role="status">브라우저가 설치 가능 여부를 확인합니다. 설치 버튼이 나타나면 눌러주세요.</p>
+    <details class="qr-install-manual"><summary>설치 버튼이 보이지 않나요?</summary><p class="note">Android: Chrome 메뉴 → 앱 설치 또는 홈 화면에 추가.<br>iPhone: Safari 공유 → 홈 화면에 추가.<br>카카오톡 등 앱 안에서 접속했다면 Chrome 또는 Safari로 여세요.<br>이미 설치했다면 홈 화면 아이콘으로 실행할 수 있습니다.</p></details>
+    <button id="qr-install-later" class="dialog-later" type="button">지금은 웹으로 이용하기</button>
+  </dialog>
   <nav class="mobile-bar" aria-label="빠른 메뉴"><a href="#search">⌕ 검색하기</a><button id="mobile-refresh" type="button">↻ 새로고침</button><a href="#top">↑ 맨 위로</a></nav>
 </body>
 </html>

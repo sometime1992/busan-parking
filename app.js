@@ -238,6 +238,10 @@ window.addEventListener('online', () => {
 // 설치 요청은 사용자가 버튼을 눌렀을 때만 표시합니다.
 const installButton = $('install-button');
 const installHelp = $('install-help');
+const qrDialog = $('qr-install-dialog');
+const qrInstallButton = $('qr-install-button');
+const qrInstallStatus = $('qr-install-status');
+const qrInstallVisit = new URLSearchParams(window.location.search).get('install') === '1';
 let installPrompt = null;
 const standalone = window.matchMedia('(display-mode: standalone)');
 function updateInstallState() {
@@ -245,31 +249,42 @@ function updateInstallState() {
   installButton.hidden = installed || !installPrompt;
   $('install-panel').hidden = installed;
   document.querySelector('.header-link').hidden = installed;
+  qrInstallButton.hidden = installed || !installPrompt;
+  if (installed && qrDialog.open) closeInstallDialog();
+  if (installPrompt) qrInstallStatus.textContent = '설치하기 버튼을 눌러 브라우저 설치 창을 여세요.';
 }
 window.addEventListener('beforeinstallprompt', event => {
   event.preventDefault();
   installPrompt = event;
   updateInstallState();
 });
-installButton.addEventListener('click', async () => {
+async function requestInstall() {
   if (!installPrompt) return;
   const prompt = installPrompt;
   installPrompt = null;
   installButton.hidden = true;
+  qrInstallButton.hidden = true;
   try {
     await prompt.prompt();
     const result = await prompt.userChoice;
     installHelp.textContent = result.outcome === 'accepted'
       ? '설치 요청을 완료했습니다. 기기의 설치 진행 상황을 확인하세요.'
       : '나중에 브라우저 메뉴에서 설치 또는 홈 화면 추가를 선택할 수 있습니다.';
+    qrInstallStatus.textContent = installHelp.textContent;
   } catch {
     installHelp.textContent = '브라우저 메뉴에서 설치 또는 홈 화면 추가를 선택하세요.';
+    qrInstallStatus.textContent = installHelp.textContent;
   }
-});
+}
+installButton.addEventListener('click', requestInstall);
+qrInstallButton.addEventListener('click', requestInstall);
 window.addEventListener('appinstalled', () => {
   installPrompt = null;
   installButton.hidden = true;
   installHelp.textContent = '설치되었습니다. 홈 화면 아이콘으로 실행할 수 있습니다.';
+  qrInstallStatus.textContent = installHelp.textContent;
+  if (qrDialog.open) closeInstallDialog();
+  updateInstallState();
 });
 standalone.addEventListener('change', updateInstallState);
 updateInstallState();
@@ -293,4 +308,30 @@ if ('serviceWorker' in navigator) {
     .catch(() => {
       installHelp.textContent += ' 오프라인 실행 준비에 실패했습니다. 인터넷 연결 후 새로고침해 주세요.';
     });
+}
+
+// 고정 헤더의 현재 위치 대신 문서의 맨 위로 직접 이동합니다.
+document.querySelectorAll('a[href="#top"]').forEach(link => {
+  link.addEventListener('click', event => {
+    event.preventDefault();
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+  });
+});
+
+// QR 전용 접속에서는 자체 설치 안내를 먼저 엽니다.
+function removeInstallQuery() {
+  const url = new URL(window.location.href);
+  url.searchParams.delete('install');
+  window.history.replaceState(null, '', url.href);
+}
+function closeInstallDialog() {
+  qrDialog.close();
+  removeInstallQuery();
+}
+$('qr-install-later').addEventListener('click', closeInstallDialog);
+qrDialog.addEventListener('cancel', removeInstallQuery);
+if (qrInstallVisit && !standalone.matches && navigator.standalone !== true) {
+  qrDialog.showModal();
+} else if (qrInstallVisit) {
+  removeInstallQuery();
 }
