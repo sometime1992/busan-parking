@@ -357,3 +357,11 @@ function setView(mode) {
 }
 $('view-grid').addEventListener('click', () => setView('grid'));
 $('view-list').addEventListener('click', () => setView('list'));
+
+// 모바일은 QR 안내를 접어두고, PC에서는 바로 볼 수 있게 합니다.
+const qrLayout = window.matchMedia('(min-width: 601px)');
+function updateQRLayout() {
+  $('install-qr-details').open = qrLayout.matches;
+}
+qrLayout.addEventListener('change', updateQRLayout);
+updateQRLayout();

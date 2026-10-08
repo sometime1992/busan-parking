@@ -93,3 +93,49 @@ select { display:block; width:100%; margin-top:8px; padding:11px; border:1px sol
   .mobile-bar { display:flex; position:fixed; left:0; right:0; bottom:0; z-index:6; padding:9px 14px calc(9px + env(safe-area-inset-bottom)); border-top:1px solid var(--line); background:#fffffff5; backdrop-filter:blur(12px); box-shadow:0 -4px 20px #19315105; gap:10px; }.mobile-bar > * { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; padding:6px 4px; border-radius:12px; font-size:10px; font-weight:650; text-decoration:none; color:#6a7891; background:transparent; }.mobile-bar svg { width:20px; height:20px; }.mobile-bar button { color:var(--blue); background:#edf2ff; }
 }
 @media (prefers-reduced-motion:no-preference) { button,.map-link,.card { transition:background .15s,border-color .15s; } }
+
+/* 설치 영역: 현재 기기 설치와 휴대폰 QR 안내를 구분합니다. */
+.install-panel { display:grid; grid-template-columns:minmax(0,1fr) 258px; align-items:center; gap:40px; padding:32px 36px; background:linear-gradient(120deg,#edf3ff,#f7f9ff); }
+.install-intro { display:flex; align-items:center; gap:17px; }
+.install-intro .install-icon { display:grid; flex:0 0 66px; width:66px; height:66px; font-size:42px; border-radius:19px; box-shadow:0 8px 18px #2458e620; }
+.install-copy .install-eyebrow { color:var(--blue); font-size:11px; font-weight:650; margin:0 0 7px; }
+.install-copy h2 { font-size:29px; line-height:1.3; margin:0; letter-spacing:-.05em; }
+.install-copy .install-description { font-size:13px; margin:19px 0 0; line-height:1.85; }
+.install-benefits { display:flex; flex-wrap:wrap; list-style:none; padding:0; gap:8px; margin:17px 0 0; }
+.install-benefits li { padding:6px 10px; border:1px solid #d9e4fa; border-radius:7px; background:#ffffff90; font-size:11px; color:#546781; }
+.install-benefits li::before { content:'✓'; color:var(--blue); font-weight:700; margin-right:5px; }
+.install-actions { display:flex; align-items:flex-start; gap:12px; flex-wrap:wrap; margin-top:23px; }
+.install-copy #install-button { display:flex; align-items:center; justify-content:center; gap:19px; font-size:13px; margin:0; padding:12px 17px; min-height:46px; border-radius:10px; }
+.install-actions #install-instructions { flex:1; min-width:165px; }
+.install-actions summary { padding:12px 13px; min-height:46px; border:1px solid #d7e1f4; border-radius:10px; background:white; color:#435877; font-size:12px; }
+.install-actions #install-help { padding:12px 0 0; font-size:12px; margin:0; }
+.install-copy .install-footnote { margin:14px 0 0; font-size:11px; color:#697c97; }
+.install-qr-side { padding-left:29px; border-left:1px solid #dce5f7; align-self:stretch; display:flex; flex-direction:column; justify-content:center; }
+.install-qr-side > summary { font-size:14px; font-weight:700; color:var(--ink); padding:0; }
+.install-qr-content .qr-description { margin:8px 0 12px; color:var(--muted); font-size:12px; line-height:1.65; }
+.install-qr-content .install-qr { width:100%; padding:12px; border:1px solid #e3e9f4; border-radius:13px; box-shadow:0 5px 15px #203b6504; }
+.install-qr figcaption { font-size:10px; margin-top:6px; line-height:1.7; }
+.install-qr-content .qr-open-link { display:block; text-align:center; font-size:12px; font-weight:550; margin-top:11px; text-underline-offset:4px; }
+@media (max-width:820px) {
+  .install-panel { grid-template-columns:minmax(0,1fr) 226px; padding:28px; gap:26px; }
+  .install-qr-side { padding-left:22px; }
+  .install-copy h2 { font-size:26px; }
+  .install-actions { flex-direction:column; align-items:stretch; }
+}
+@media (max-width:600px) {
+  .install-panel { grid-template-columns:minmax(0,1fr); padding:24px 20px; gap:22px; align-items:start; }
+  .install-intro { gap:13px; }
+  .install-intro .install-icon { flex-basis:54px; width:54px; height:54px; font-size:35px; border-radius:15px; }
+  .install-copy h2 { font-size:25px; }
+  .install-copy .install-eyebrow { font-size:10px; margin-bottom:5px; }
+  .install-copy .install-description { margin-top:16px; font-size:12px; }
+  .install-benefits { gap:6px; margin-top:14px; }
+  .install-benefits li { font-size:10px; padding:6px 8px; }
+  .install-actions { margin-top:20px; gap:9px; }
+  .install-copy #install-button { width:100%; font-size:14px; min-height:48px; }
+  .install-copy .install-footnote { font-size:10px; }
+  .install-qr-side { display:block; padding:17px 0 0; border-left:0; border-top:1px solid #dce5f7; }
+  .install-qr-side > summary { font-size:13px; min-height:32px; }
+  .install-qr-content .qr-description { font-size:12px; text-align:center; }
+  .install-qr-content .install-qr { max-width:230px; margin:0 auto; }
+}
