@@ -9,9 +9,10 @@ let timer = null;
 let activeFilter = 'all';
 const openDetails = new Set();
 const mobileRefresh = $('mobile-refresh');
+const mobileRefreshLabel = $('mobile-refresh-label');
 const known = p => Number.isFinite(p.curravacnt) && p.curravacnt >= 0;
 function resetStats() {
-  for (const id of ['stat-total', 'stat-available', 'stat-full', 'stat-unknown']) $(id).textContent = '—';
+  for (const id of ['stat-total', 'stat-available', 'stat-full', 'stat-unknown', 'filter-count-all', 'filter-count-available', 'filter-count-full', 'filter-count-unknown']) $(id).textContent = '—';
   $('result-count').textContent = '';
 }
 function resetFilters() {
@@ -68,6 +69,10 @@ function render() {
   $('stat-available').textContent = all.filter(p => known(p) && p.curravacnt > 0).length;
   $('stat-full').textContent = all.filter(p => known(p) && p.curravacnt === 0).length;
   $('stat-unknown').textContent = all.filter(p => !known(p)).length;
+  $('filter-count-all').textContent = all.length;
+  $('filter-count-available').textContent = $('stat-available').textContent;
+  $('filter-count-full').textContent = $('stat-full').textContent;
+  $('filter-count-unknown').textContent = $('stat-unknown').textContent;
   const query = normalize($('search').value);
   const items = all.filter(p => {
     const match = normalize(p.parknm).includes(query) || normalize(p.pkNam).includes(query);
@@ -87,6 +92,7 @@ function render() {
     const state = unknown ? 'unknown' : p.curravacnt === 0 ? 'full' : '';
     const card = element('li', undefined, 'card');
     const top = element('div', undefined, 'card-top');
+    top.append(element('span', 'P', 'parking-symbol'));
     top.append(element('h3', value(p.parknm)), element('span', unknown ? '확인 불가' : p.curravacnt === 0 ? '만차' : '주차 가능', `badge ${state}`));
     card.append(top);
     const address = element('p', value(p.doroAddr ?? p.jibunAddr), 'address-preview');
@@ -158,7 +164,7 @@ async function loadParkingList() {
   loadButton.disabled = true;
   mobileRefresh.disabled = true;
   loadButton.textContent = '조회 중…';
-  mobileRefresh.textContent = '조회 중…';
+  mobileRefreshLabel.textContent = '조회 중…';
   parkingList.setAttribute('aria-busy','true');
   statusText.className = '';
   statusText.textContent = '주차장 정보를 불러오는 중입니다.';
@@ -188,7 +194,7 @@ async function loadParkingList() {
     loadButton.disabled = false;
     mobileRefresh.disabled = false;
     loadButton.textContent = '↻ 새로고침';
-    mobileRefresh.textContent = '↻ 새로고침';
+    mobileRefreshLabel.textContent = '새로고침';
     parkingList.setAttribute('aria-busy','false');
   }
 }
@@ -335,3 +341,19 @@ if (qrInstallVisit && !standalone.matches && navigator.standalone !== true) {
 } else if (qrInstallVisit) {
   removeInstallQuery();
 }
+
+// 검색 예시와 PC 보기 방식 전환.
+document.querySelectorAll('[data-search]').forEach(button => {
+  button.addEventListener('click', () => {
+    $('search').value = button.dataset.search;
+    render();
+    $('search').focus();
+  });
+});
+function setView(mode) {
+  parkingList.dataset.view = mode;
+  $('view-grid').setAttribute('aria-pressed', String(mode === 'grid'));
+  $('view-list').setAttribute('aria-pressed', String(mode === 'list'));
+}
+$('view-grid').addEventListener('click', () => setView('grid'));
+$('view-list').addEventListener('click', () => setView('list'));
