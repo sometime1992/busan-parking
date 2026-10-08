@@ -4,6 +4,7 @@ const loadButton = $('load-button');
 const statusText = $('status');
 const parkingList = $('parking-list');
 let data = null;
+let fullLoadedAt = 0;
 let loading = false;
 let timer = null;
 let activeFilter = 'all';
@@ -157,6 +158,26 @@ function render() {
   $('result-count').textContent = `${items.length}곳`;
   if (!statusText.classList.contains('error')) statusText.textContent = `${all.length}곳 중 ${items.length}곳 표시 · 빈자리 수는 도착 시 달라질 수 있습니다.`;
 }
+// 주차장 코드로 빈자리만 갱신하고 주소·요금·운영시간은 유지합니다.
+function applyRealtimeSnapshot(next) {
+  if (!data || !Array.isArray(next.realtimeList) || next.sources?.realtime?.status !== 'ok') {
+    throw new Error('빈자리 응답 형식을 확인해 주세요.');
+  }
+  const updates = new Map(next.realtimeList.map(item => [String(item.parkgcd), item]));
+  data = {
+    ...data,
+    sources: { ...data.sources, realtime: next.sources.realtime },
+    warnings: (data.warnings ?? []).filter(message => !message.startsWith('실시간 현황')),
+    parkingList: data.parkingList.map(parking => {
+      const update = updates.get(String(parking.parkgcd));
+      return { ...parking,
+        maxcnt: update?.maxcnt ?? null, parkingcnt: update?.parkingcnt ?? null,
+        curravacnt: update?.curravacnt ?? null, lastupdatetime: update?.lastupdatetime ?? null,
+        realtimeMatched: update?.realtimeMatched ?? false, dataIssues: update?.dataIssues ?? []
+      };
+    })
+  };
+}
 async function loadParkingList() {
   if (!navigator.onLine) { showOffline(); return; }
   if (loading) return;
@@ -167,20 +188,28 @@ async function loadParkingList() {
   mobileRefreshLabel.textContent = '조회 중…';
   parkingList.setAttribute('aria-busy','true');
   statusText.className = '';
-  statusText.textContent = '주차장 정보를 불러오는 중입니다.';
+  const lightweight = data !== null && Date.now() - fullLoadedAt < 6 * 60 * 60 * 1000;
+  statusText.textContent = lightweight ? '빈자리만 빠르게 갱신하고 있습니다.' : '주차장 정보를 불러오는 중입니다.';
   try {
-    const response = await fetch('/api/parking', { cache: 'no-store', signal: AbortSignal.timeout(90000) });
+    const response = await fetch(lightweight ? '/api/parking?mode=realtime' : '/api/parking', { cache: 'no-store', signal: AbortSignal.timeout(15000) });
     const next = await response.json();
     if (!response.ok) throw new Error(next.message || '정보를 불러오지 못했습니다.');
-    if (!Array.isArray(next.parkingList)) throw new Error('응답 형식을 확인해 주세요.');
+    if (!lightweight && !Array.isArray(next.parkingList)) throw new Error('응답 형식을 확인해 주세요.');
     if (!navigator.onLine) { showOffline(); return; }
-    data = next;
+    if (lightweight) {
+      // 오프라인 이벤트로 결과가 지워졌다면 다음 조회는 전체 정보를 받습니다.
+      if (!data) return;
+      applyRealtimeSnapshot(next);
+    } else {
+      data = next;
+      fullLoadedAt = Date.now();
+    }
     $('warnings').textContent = (data.warnings ?? []).join(' ');
     $('connection-status').hidden = true;
     const fetched = data.sources?.realtime?.fetchedAt;
     const fetchedDate = fetched ? new Date(fetched) : null;
     $('last-checked').textContent = fetchedDate && !Number.isNaN(fetchedDate.getTime())
-      ? `마지막 조회 ${fetchedDate.toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })} · 한국시간`
+      ? `마지막 조회 ${fetchedDate.toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })} · 한국시간${data.sources?.realtime?.cached ? ' · 1분 이내 조회 결과' : ''}`
       : '실시간 조회 실패 · 각 주차장의 제공기관 갱신시간을 확인하세요.';
     $('summary').textContent = `기본정보 연결 ${data.matchedCount}곳 / 미연결 ${data.unmatchedCount}곳 · 마지막 조회 ${fetched ? new Date(fetched).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }) : '실시간 조회 실패'} (한국시간)`;
     render();
