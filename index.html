@@ -17,7 +17,7 @@
     <div class="header-inner">
       <a class="brand" href="./" aria-label="부산주차장 홈"><span class="brand-mark" aria-hidden="true">P</span><span>부산주차장<small>BUSAN PARKING</small></span></a>
       <span class="header-caption">부산의 주차, 조금 더 편하게</span>
-      <a class="header-link" href="#install-panel">홈 화면에 추가 ↗</a>
+      <a class="header-link" href="#install-panel">앱 설치·QR ↗</a>
     </div>
   </header>
   <main class="container">
@@ -54,7 +54,21 @@
       <ul id="parking-list" aria-label="주차장 검색 결과" aria-busy="false"></ul>
       <details class="data-info"><summary>데이터 출처와 이용 안내</summary><p id="summary" class="note"></p><p class="note">실시간 현황: 부산시설공단 · 기본정보: 부산광역시<br>빈자리는 제공기관 갱신 시점의 정보입니다. 요금·운영시간은 기준일을 확인하고 현장 안내를 우선해 주세요. 주소는 공공데이터 기준이며 실제 위치와 다를 수 있습니다. 카카오맵에서 위치를 확인하세요.</p></details>
     </section>
-    <section id="install-panel" class="install-panel" aria-label="홈 화면 설치 안내"><div class="install-icon" aria-hidden="true">P</div><div class="install-copy"><h2>다음엔 홈 화면에서 바로</h2><p>부산주차장을 앱처럼 편하게 열어보세요.</p><details id="install-instructions"><summary>설치 방법 보기</summary><p id="install-help">Android·PC: 브라우저 메뉴 → 앱 설치 또는 홈 화면에 추가.<br>iPhone: Safari 공유 메뉴 → 홈 화면에 추가.<br>카카오톡 등 앱 안에서 열었다면 Chrome이나 Safari로 다시 접속하세요.</p></details></div><button id="install-button" type="button" hidden>앱처럼 설치하기</button></section>
+    <section id="install-panel" class="install-panel" aria-label="앱 설치 및 QR코드 안내">
+      <div class="install-icon" aria-hidden="true">P</div>
+      <div class="install-copy">
+        <h2>휴대폰에서도 편하게, 부산주차장</h2>
+        <p>휴대폰 카메라로 QR코드를 찍어 사이트를 열어보세요.</p>
+        <p class="qr-steps">① QR 스캔 → ② 사이트 접속 → ③ 앱 설치 또는 홈 화면에 추가</p>
+        <button id="install-button" type="button" hidden>앱처럼 설치하기</button>
+        <details id="install-instructions"><summary>설치 방법 보기</summary><p id="install-help">Android: Chrome에서 사이트를 연 뒤 ‘앱처럼 설치하기’ 또는 메뉴 → 앱 설치 / 홈 화면에 추가.<br>iPhone: Safari 공유 메뉴 → 홈 화면에 추가.<br>PC: 브라우저의 설치 버튼이나 메뉴를 이용하세요.<br>카카오톡 등 앱 안에서 열었다면 Chrome이나 Safari로 다시 접속하세요.</p></details>
+      </div>
+      <figure class="install-qr">
+        <a href="https://busan-parking-3m4.pages.dev/" aria-label="부산주차장 설치 페이지 열기"><img src="install-qr.png" width="164" height="164" alt="휴대폰으로 부산주차장 사이트를 열기 위한 QR코드" loading="lazy"></a>
+        <figcaption>휴대폰 카메라로 스캔</figcaption>
+        <a class="qr-open-link" href="https://busan-parking-3m4.pages.dev/">이 휴대폰에서 사이트 열기 ↗</a>
+      </figure>
+    </section>
     <footer class="site-footer"><span>부산주차장 <small>BUSAN PARKING</small></span><a href="#top">맨 위로 ↑</a></footer>
   </main>
   <nav class="mobile-bar" aria-label="빠른 메뉴"><a href="#search">⌕ 검색하기</a><button id="mobile-refresh" type="button">↻ 새로고침</button><a href="#top">↑ 맨 위로</a></nav>

@@ -134,3 +134,15 @@ dt { color: var(--muted); } dd { margin: 0; }
   .mobile-bar > * { flex: 1; text-align: center; padding: 10px 4px; font-size: 12px; font-weight: 650; text-decoration: none; border-radius: 9px; } .mobile-bar a { background: #f0f5ef; }
 }
 @media (prefers-reduced-motion: no-preference) { button, .map-link { transition: background .15s; } }
+
+.install-qr { flex: 0 0 188px; margin: 0; padding: 12px; border-radius: 12px; background: white; text-align: center; }
+.install-qr img { display: block; max-width: 100%; height: auto; margin: auto; image-rendering: pixelated; }
+.install-qr figcaption { font-size: 11px; color: var(--muted); margin-top: 5px; }
+.qr-open-link { display: inline-block; font-size: 10px; margin-top: 8px; color: var(--accent); text-underline-offset: 3px; }
+.install-copy .qr-steps { margin: 10px 0; font-size: 11px; }
+.install-copy #install-button { margin: 8px 0; }
+@media (max-width: 600px) {
+  .install-qr { flex-basis: auto; width: 100%; margin-top: 8px; }
+  .install-qr img { width: 164px; height: 164px; }
+  .install-copy .qr-steps { line-height: 1.8; }
+}
