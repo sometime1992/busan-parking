@@ -1,66 +1,136 @@
-// 서버 담당: 인증키를 읽고 시설공단 주차장 목록 API를 호출합니다.
-// 다음 단계에서 실시간 현황, 부산시 기본정보를 이 파일에 추가합니다.
-const LIST_API = "https://apis.data.go.kr/B552587/ParkingInfoService_v2/getParkingList_v2";
-
+// 서버 담당: 세 공공데이터 API를 호출하고 통합합니다. 인증키는 환경변수만 사용합니다.
+const APIS = {
+  list: ['https://apis.data.go.kr/B552587/ParkingInfoService_v2/getParkingList_v2', 'serviceKey', 21600],
+  realtime: ['https://apis.data.go.kr/B552587/ParkingInfoService_v2/getParkingInfoList_v2', 'serviceKey', 60],
+  basic: ['https://apis.data.go.kr/6260000/BusanPblcPrkngInfoService/getPblcPrkngInfo', 'ServiceKey', 21600]
+};
+// 첨부 문서의 참고 프로젝트에서 확인한 별칭. 대상 이름이 유일할 때만 연결합니다.
+const ALIASES = { A11: '부산기계공고 공영주차장', A21: '화명 공영주차장', A37: '롯데광복점 뒤 2번', A48: '대연고가도로 밑', A434: '만덕2동사 앞' };
+const BASIC_FIELDS = ['mgntNum','pkNam','guNm','doroAddr','jibunAddr','tponNum','pkFm','pkCnt','svcSrtTe','svcEndTe','satSrtTe','satEndTe','hldSrtTe','hldEndTe','oprDay','feeInfo','pkBascTime','tenMin','pkAddTime','feeAdd','ftDay','ftMon','xCdnt','yCdnt','fnlDt','spclNote'];
 function json(body, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: {
-      "Content-Type": "application/json; charset=utf-8",
-      "Cache-Control": "no-store",
-      "X-Content-Type-Options": "nosniff"
+  return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } });
+}
+export function clean(value) {
+  const text = String(value ?? '').trim();
+  return !text || ['-', 'null', 'undefined'].includes(text.toLowerCase()) ? null : text;
+}
+export function count(value) {
+  const text = clean(value);
+  if (text === null) return null;
+  const n = Number(text.replace(/,/g, ''));
+  return Number.isSafeInteger(n) && n >= 0 ? n : null;
+}
+export function normalizeName(value) {
+  return String(value ?? '').normalize('NFKC').toLowerCase().replace(/공영주차장|공영|도시철도/g, '').replace(/[\s(),，（）]/g, '');
+}
+// 같은 이름이 여러 번 나타나면 임의로 첫 번째 항목을 고르지 않습니다.
+function group(items, field, normalize = String) {
+  const map = new Map();
+  for (const item of items) {
+    const key = normalize(item[field] ?? '');
+    if (key) map.set(key, [...(map.get(key) ?? []), item]);
+  }
+  return map;
+}
+export function mergeParkingData(list, realtime, basic) {
+  const rtMap = group(realtime, 'parkgcd');
+  const basicMap = group(basic, 'pkNam', normalizeName);
+  return list.map(parking => {
+    const code = String(parking.parkgcd ?? '');
+    const rtCandidates = rtMap.get(code) ?? [];
+    const rt = rtCandidates.length === 1 ? rtCandidates[0] : null;
+    let candidates = basicMap.get(normalizeName(parking.parknm)) ?? [];
+    let method = 'exact';
+    if (!candidates.length && ALIASES[code]) {
+      candidates = basicMap.get(normalizeName(ALIASES[code])) ?? [];
+      method = 'alias';
     }
+    const b = candidates.length === 1 ? candidates[0] : null;
+    const result = {
+      parkgcd: code, parknm: clean(parking.parknm) ?? '이름 없음',
+      maxcnt: count(rt?.maxcnt), parkingcnt: count(rt?.parkingcnt), curravacnt: count(rt?.curravacnt),
+      lastupdatetime: clean(rt?.lastupdatetime), realtimeMatched: !!rt,
+      basicMatched: !!b, matchMethod: b ? method : 'none',
+      matchStatus: b ? 'matched' : candidates.length > 1 ? 'ambiguous' : 'unmatched',
+      candidateCount: candidates.length
+    };
+    for (const field of BASIC_FIELDS) result[field] = clean(b?.[field]);
+    result.dataIssues = [];
+    if (result.maxcnt !== null && result.curravacnt !== null && result.curravacnt > result.maxcnt) {
+      result.curravacnt = null;
+      result.dataIssues.push('주차가능대수가 전체 면수보다 커 확인이 필요합니다.');
+    }
+    return result;
   });
 }
-
-export async function onRequestGet(context) {
-  const apiKey = context.env.DATA_API_KEY;
-  if (!apiKey) {
-    return json({ message: "Cloudflare에 DATA_API_KEY 비밀 변수를 등록한 뒤 다시 배포해 주세요." }, 503);
+async function fetchAll(name, key, context) {
+  const [endpoint, keyName, ttl] = APIS[name];
+  // 캐시에는 인증키 원문을 넣지 않습니다. 키가 바뀌면 캐시도 분리합니다.
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(key));
+  const hash = Array.from(new Uint8Array(digest), x => x.toString(16).padStart(2,'0')).join('');
+  const cacheUrl = new URL(`/__parking_cache/v1/${name}/${hash}`, context.request.url).href;
+  const cache = globalThis.caches?.default;
+  if (cache) {
+    try { const hit = await cache.match(cacheUrl); if (hit) return await hit.json(); } catch { /* 캐시 실패는 조회에 영향 없음 */ }
   }
-
-  try {
-    // Decoding 키를 권장합니다. Encoding 키도 중복 인코딩하지 않습니다.
-    let decodedKey = apiKey;
-    try { decodedKey = decodeURIComponent(apiKey); } catch { /* Decoding 키 그대로 사용 */ }
-    const parkingList = [];
-    // 첫 응답의 totalCount를 확인해 다음 페이지가 있으면 함께 가져옵니다.
-    for (let page = 1; page <= 10; page++) {
-      const url = new URL(LIST_API);
-      url.searchParams.set("serviceKey", decodedKey);
-      url.searchParams.set("pageNo", String(page));
-      url.searchParams.set("numOfRows", "100");
-      url.searchParams.set("resultType", "json");
-      const response = await fetch(url, { signal: AbortSignal.timeout(10000) });
-      if (!response.ok) throw new Error("API_HTTP_ERROR");
-      const data = await response.json();
-      const header = data?.response?.header;
-      const body = data?.response?.body;
-      if (!["00", "0"].includes(String(header?.resultCode)) || !body) {
-        return json({ message: "공공데이터 API가 요청을 승인하지 않았습니다. 인증키·활용승인·호출한도를 확인해 주세요." }, 502);
+  const rows = name === 'basic' ? 1000 : 100;
+  const items = [];
+  const seen = new Set();
+  for (let page = 1; page <= 20; page++) {
+    const url = new URL(endpoint);
+    url.searchParams.set(keyName, key);
+    url.searchParams.set('pageNo', String(page));
+    url.searchParams.set('numOfRows', String(rows));
+    url.searchParams.set('resultType', 'json');
+    const response = await fetch(url, { signal: AbortSignal.timeout(10000) });
+    if (!response.ok) throw new Error('UPSTREAM_HTTP');
+    const data = await response.json();
+    const envelope = data.response ?? data.getPblcPrkngInfo ?? data;
+    const body = envelope.body;
+    if (!['00','0'].includes(String(envelope.header?.resultCode)) || !body) throw new Error('UPSTREAM_REJECTED');
+    const raw = body.items && typeof body.items === 'object' && 'item' in body.items ? body.items.item : body.items;
+    const batch = Array.isArray(raw) ? raw : raw && typeof raw === 'object' && Object.keys(raw).length ? [raw] : [];
+    const total = count(body.totalCount);
+    if (total !== 0 && !batch.length && (total === null || items.length < total)) throw new Error('INCOMPLETE');
+    const signature = JSON.stringify(batch);
+    if (batch.length && seen.has(signature)) throw new Error('REPEATED_PAGE');
+    seen.add(signature);
+    items.push(...batch);
+    if ((total !== null && items.length >= total) || (total === null && batch.length < rows)) {
+      const result = { items, fetchedAt: new Date().toISOString() };
+      if (cache) {
+        const write = cache.put(cacheUrl, new Response(JSON.stringify(result), { headers: { 'Content-Type': 'application/json', 'Cache-Control': `public, max-age=${ttl}` } })).catch(() => {});
+        if (context.waitUntil) context.waitUntil(write); else await write;
       }
-      const rawItems = body.items?.item;
-      const items = Array.isArray(rawItems) ? rawItems : rawItems && typeof rawItems === "object" ? [rawItems] : [];
-      const totalCount = Number(body.totalCount);
-      const hasTotal = body.totalCount != null && String(body.totalCount).trim() !== "" && Number.isInteger(totalCount) && totalCount >= 0;
-      if (!items.length && (!hasTotal || parkingList.length < totalCount)) throw new Error("INCOMPLETE_RESPONSE");
-      parkingList.push(...items.map(item => ({
-        parkgcd: String(item.parkgcd ?? ""),
-        parknm: String(item.parknm ?? "이름 없음")
-      })));
-      if ((hasTotal && parkingList.length >= totalCount) || (!hasTotal && items.length < 100)) {
-        return json({ parkingList });
-      }
+      return result;
     }
-    throw new Error("TOO_MANY_PAGES");
-  } catch {
-    // 요청 URL·인증키·제공기관 원문 오류는 브라우저에 보내지 않습니다.
-    return json({ message: "주차장 목록을 불러오지 못했습니다. 인증키와 공공데이터 API 연결 상태를 확인한 뒤 다시 시도해 주세요." }, 502);
   }
+  throw new Error('PAGE_LIMIT');
 }
-
+export async function onRequestGet(context) {
+  let key = String(context.env.DATA_API_KEY ?? '').trim();
+  if (!key) return json({ message: 'Cloudflare에 DATA_API_KEY 비밀 변수를 등록한 뒤 다시 배포해 주세요.' }, 503);
+  try { key = decodeURIComponent(key); } catch { /* Decoding 키 그대로 사용 */ }
+  const names = ['list','realtime','basic'];
+  const results = await Promise.allSettled(names.map(name => fetchAll(name, key, context)));
+  if (results[0].status !== 'fulfilled') return json({ message: '주차장 목록을 불러오지 못했습니다. 인증키·활용승인·호출한도를 확인해 주세요.' }, 502);
+  const warnings = [];
+  const sources = {};
+  const sets = results.map((r, i) => {
+    sources[names[i]] = { status: r.status === 'fulfilled' ? 'ok' : 'error', fetchedAt: r.status === 'fulfilled' ? r.value.fetchedAt : null };
+    if (r.status === 'fulfilled') return r.value.items;
+    warnings.push(i === 1 ? '실시간 현황 조회에 실패했습니다. 빈자리는 확인 불가로 표시합니다.' : '부산시 기본정보 조회에 실패했습니다. 활용승인·인증키·호출한도를 확인해 주세요.');
+    return [];
+  });
+  const all = mergeParkingData(...sets);
+  const matchedCount = all.filter(x => x.basicMatched).length;
+  const query = normalizeName(new URL(context.request.url).searchParams.get('name') ?? '');
+  const parkingList = query ? all.filter(x => normalizeName(x.parknm).includes(query) || normalizeName(x.pkNam).includes(query)) : all;
+  return json({ success: true, totalCount: all.length, resultCount: parkingList.length, basicDataCount: sets[2].length,
+    matchedCount, exactMatchedCount: all.filter(x => x.matchMethod === 'exact').length,
+    aliasMatchedCount: all.filter(x => x.matchMethod === 'alias').length, unmatchedCount: all.length - matchedCount,
+    sources, warnings, parkingList });
+}
 export function onRequest(context) {
-  return context.request.method === "GET"
-    ? onRequestGet(context)
-    : json({ message: "GET 요청만 지원합니다." }, 405);
+  return context.request.method === 'GET' ? onRequestGet(context) : json({ message: 'GET 요청만 지원합니다.' }, 405);
 }
