@@ -1,0 +1,54 @@
+// Gemini Function Calling bridge. Existing site files are untouched.
+// Protect endpoint with a separate AI_TEST_TOKEN Cloudflare secret.
+import * as search from '../../mcp/tools/searchParking.js';
+import * as free from '../../mcp/tools/findAvailableParking.js';
+import * as detail from '../../mcp/tools/getParkingDetail.js';
+const tools=[search,free,detail];
+const map=new Map(tools.map(t=>[t.definition.name,t]));
+const json=(body,status=200)=>new Response(JSON.stringify(body),{status,headers:{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
+const endpoint='https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent';
+async function generate(key,body){
+ const response=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':key},body:JSON.stringify(body),signal:AbortSignal.timeout(20000)});
+ if(!response.ok) throw new Error('Gemini API 오류 ('+response.status+'). 프로젝트 모델 접근 권한, 사용량 또는 결제를 확인하세요.');
+ return response.json();
+}
+export async function onRequestPost(context){
+ const secret=String(context.env.AI_TEST_TOKEN??'');
+ if(!secret) return json({message:'AI_TEST_TOKEN 비밀 변수 등록 후 테스트할 수 있습니다.'},503);
+ const token=context.request.headers.get('x-ai-test-token')??'';
+ // Constant-time-like comparison to avoid trivial early differences.
+ const a=new TextEncoder().encode(token),b=new TextEncoder().encode(secret);
+ let mismatch=a.length^b.length;
+ for(let i=0;i<Math.max(a.length,b.length);i++) mismatch|=(a[i]??0)^(b[i]??0);
+ if(mismatch!==0) return json({message:'인증되지 않은 요청입니다.'},401);
+ const key=String(context.env.GEMINI_API_KEY??'').trim();
+ if(!key) return json({message:'GEMINI_API_KEY 비밀 변수가 설정되지 않았습니다.'},503);
+ let input;
+ try {input=await context.request.json();}catch{return json({message:'JSON 요청이 필요합니다.'},400);}
+ const question=String(input?.question??'').trim();
+ if(!question||question.length>300) return json({message:'질문은 1~300자로 입력해 주세요.'},400);
+ const declarations=tools.map(({definition:d})=>({name:d.name,description:d.description,parameters:d.inputSchema}));
+ const contents=[{role:'user',parts:[{text:question}]}];
+ const request={contents,systemInstruction:{parts:[{text:'당신은 부산 공영주차장 정보 안내자입니다. 주차장 빈자리·주소·요금은 반드시 도구 조회 결과로만 답하세요. 조회 불가 정보는 추측하지 마세요. 빈자리는 제공기관 갱신 당시 수치이며 현장에서 달라질 수 있음을 안내하세요. 한국어로 간결하게 답하세요.'}]},tools:[{functionDeclarations:declarations}],generationConfig:{temperature:0.2,maxOutputTokens:800}};
+ try{
+  let called=[];
+  for(let round=0;round<2;round++){
+   const output=await generate(key,request);
+   const candidate=output.candidates?.[0]?.content;
+   if(!candidate?.parts?.length) throw new Error('Gemini 응답 내용이 없습니다.');
+   contents.push(candidate);
+   const calls=candidate.parts.filter(p=>p.functionCall).map(p=>p.functionCall);
+   if(!calls.length) return json({answer:candidate.parts.filter(p=>typeof p.text==='string').map(p=>p.text).join('\n'),toolsUsed:called,model:'gemini-3.5-flash-lite'});
+   const responses=[];
+   for(const c of calls.slice(0,3)){
+    const t=map.get(c.name);
+    const result=t?await t.run(c.args??{},context):{error:'허용되지 않은 도구'};
+    called.push(c.name);
+    responses.push({functionResponse:{name:c.name,response:{result},...(c.id?{id:c.id}:{})}});
+   }
+   contents.push({role:'user',parts:responses});
+  }
+  return json({message:'도구 호출 반복 제한에 도달했습니다.',toolsUsed:called},502);
+ }catch(error){return json({message:error instanceof Error?error.message:'Gemini 연결 오류'},502);}
+}
+export const onRequestGet=()=>json({message:'POST 방식으로만 테스트할 수 있습니다.'},405);
