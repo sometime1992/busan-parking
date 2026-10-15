@@ -38,23 +38,35 @@ export async function onRequestPost(context){
  const request={contents,systemInstruction:{parts:[{text:'당신은 부산 공영주차장 정보 안내자입니다. 주차장 빈자리·주소·요금은 반드시 도구 조회 결과로만 답하세요. 조회 불가 정보는 추측하지 마세요. 빈자리는 제공기관 갱신 당시 수치이며 현장에서 달라질 수 있음을 안내하세요. 한국어로 간결하게 답하세요.'}]},tools:[{functionDeclarations:declarations}],generationConfig:{temperature:0.2,maxOutputTokens:800}};
  try{
   let called=[];
+  let parkingCodes=[];
+  let parkingResults=[];
   for(let round=0;round<2;round++){
    const output=await generate(key,request);
    const candidate=output.candidates?.[0]?.content;
    if(!candidate?.parts?.length) throw new Error('Gemini 응답 내용이 없습니다.');
    contents.push(candidate);
    const calls=candidate.parts.filter(p=>p.functionCall).map(p=>p.functionCall);
-   if(!calls.length) return json({answer:candidate.parts.filter(p=>typeof p.text==='string').map(p=>p.text).join('\n'),toolsUsed:called,model:'gemini-3.5-flash-lite'});
+   if(!calls.length) return json({answer:candidate.parts.filter(p=>typeof p.text==='string').map(p=>p.text).join('\\n'),parkingCodes,parkingResults,toolsUsed:called,model:'gemini-3.5-flash-lite'});
    const responses=[];
    for(const c of calls.slice(0,3)){
     const t=map.get(c.name);
     const result=t?await t.run(c.args??{},context):{error:'허용되지 않은 도구'};
+    if(t) {
+      const rows=Array.isArray(result?.results) ? result.results : (result?.code ? [result] : []);
+      for(const item of rows){
+        const code=String(item?.code??'').trim();
+        if(code && !parkingCodes.includes(code) && parkingCodes.length<20){
+          parkingCodes.push(code);
+          parkingResults.push({code,name:String(item.name??''),availableSpaces:item.availableSpaces??null});
+        }
+      }
+    }
     called.push(c.name);
     responses.push({functionResponse:{name:c.name,response:{result},...(c.id?{id:c.id}:{})}});
    }
    contents.push({role:'user',parts:responses});
   }
-  return json({message:'도구 호출 반복 제한에 도달했습니다.',toolsUsed:called},502);
+  return json({message:'도구 호출 반복 제한에 도달했습니다.',toolsUsed:called,parkingCodes},502);
  }catch(error){return json({message:error instanceof Error?error.message:'Gemini 연결 오류'},502);}
 }
 export const onRequestGet=()=>json({message:'POST 방식으로만 테스트할 수 있습니다.'},405);
