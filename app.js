@@ -422,7 +422,6 @@ function activateAiResults(codes) {
   render();
 }
 $('ai-reset-list').addEventListener('click', () => { resetFilters(); $('results-title').scrollIntoView({behavior:'smooth',block:'start'}); });
-$('ai-see-results').addEventListener('click', () => $('results-title').scrollIntoView({behavior:'smooth',block:'start'}));
 
 // 개인 과제용 AI 검색: 브라우저는 Gemini API 키를 전달받지 않습니다.
 const aiForm = $('ai-form');
@@ -453,7 +452,8 @@ aiForm.addEventListener('submit', async event => {
     answer.replaceChildren();
     const title = element('h3', matched.length ? '주차장 검색 결과' : 'AI 답변', 'ai-answer-title');
     answer.append(title);
-    const text = element('p', matched.length ? `질문에 맞는 주차장 ${matched.length}곳을 찾았습니다. 자세한 빈자리·요금·지도 정보는 아래 기존 주차장 카드에서 확인하세요.` : summary || '답변을 생성하지 못했습니다.', 'ai-summary');
+    const brief = summary.split(/\\n|\n/).map(v=>v.trim()).find(Boolean)?.replace(/\*\*/g,'').replace(/^#+\s*/,'') ?? '';
+    const text = element('p', matched.length ? (brief && brief.length<=190 ? brief : `질문에 맞는 주차장 ${matched.length}곳을 찾았습니다. 아래에서 상세정보를 확인하세요.`) : summary || '답변을 생성하지 못했습니다.', 'ai-summary');
     answer.append(text);
     if(matched.length) {
       activateAiResults(matched);
@@ -461,11 +461,9 @@ aiForm.addEventListener('submit', async event => {
       button.type='button';
       button.addEventListener('click',()=> $('results-title').scrollIntoView({behavior:'smooth',block:'start'}));
       answer.append(button);
-      $('ai-see-results').hidden=false;
     } else {
       clearAiMode();
       render();
-      $('ai-see-results').hidden=true;
       if(codes.length && !data) answer.append(element('p','주차장 목록을 아직 불러오지 못했습니다. 인터넷 연결 후 새로고침해 주세요.','ai-meta'));
     }
     answer.append(element('p', 'AI 안내는 제공기관의 조회 자료를 기준으로 하며, 빈자리는 도착 시 달라질 수 있습니다.', 'ai-meta'));
