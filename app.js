@@ -399,12 +399,11 @@ updateQRLayout();
 const aiForm = $('ai-form');
 aiForm.addEventListener('submit', async event => {
   event.preventDefault();
-  const password = $('ai-token').value;
   const question = $('ai-question').value.trim();
   const submit = $('ai-submit');
   const answer = $('ai-answer');
   const status = $('ai-status');
-  if (!password || !question) return;
+  if (!question) return;
   submit.disabled = true;
   submit.textContent = '답변 생성 중…';
   answer.hidden = true;
@@ -412,7 +411,7 @@ aiForm.addEventListener('submit', async event => {
   try {
     const response = await fetch('/api/gemini', {
       method: 'POST',
-      headers: {'Content-Type':'application/json','x-ai-test-token':password},
+      headers: {'Content-Type':'application/json'},
       body: JSON.stringify({question}),
       cache:'no-store',
       signal:AbortSignal.timeout(45000)
