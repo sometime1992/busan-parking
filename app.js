@@ -8,6 +8,8 @@ let fullLoadedAt = 0;
 let loading = false;
 let timer = null;
 let activeFilter = 'all';
+let aiCodes = null;
+let aiRank = new Map();
 const openDetails = new Set();
 const mobileRefresh = $('mobile-refresh');
 const mobileRefreshLabel = $('mobile-refresh-label');
@@ -17,6 +19,7 @@ function resetStats() {
   $('result-count').textContent = '';
 }
 function resetFilters() {
+  clearAiMode();
   $('search').value = '';
   activeFilter = 'all';
   updateFilterButtons();
@@ -76,11 +79,13 @@ function render() {
   $('filter-count-unknown').textContent = $('stat-unknown').textContent;
   const query = normalize($('search').value);
   const items = all.filter(p => {
+    if (aiCodes && !aiCodes.has(String(p.parkgcd))) return false;
     const match = normalize(p.parknm).includes(query) || normalize(p.pkNam).includes(query);
     const state = !known(p) ? 'unknown' : p.curravacnt === 0 ? 'full' : 'available';
     return match && (activeFilter === 'all' || activeFilter === state);
   });
   items.sort((a, b) => {
+    if (aiCodes) return (aiRank.get(String(a.parkgcd))??999) - (aiRank.get(String(b.parkgcd))??999);
     if ($('sort').value === 'available') {
       const diff = (known(b) ? b.curravacnt : -1) - (known(a) ? a.curravacnt : -1);
       if (diff) return diff;
@@ -156,6 +161,8 @@ function render() {
   }
   parkingList.replaceChildren(fragment);
   $('result-count').textContent = `${items.length}곳`;
+  $('ai-list-mode').hidden = !aiCodes;
+  if (aiCodes) $('ai-list-count').textContent = `${items.length}곳`; 
   if (!statusText.classList.contains('error')) statusText.textContent = `${all.length}곳 중 ${items.length}곳 표시 · 빈자리 수는 도착 시 달라질 수 있습니다.`;
 }
 // 주차장 코드로 빈자리만 갱신하고 주소·요금·운영시간은 유지합니다.
@@ -228,17 +235,19 @@ async function loadParkingList() {
   }
 }
 $('search-form').addEventListener('submit', event => { event.preventDefault(); render(); });
-$('search').addEventListener('input', render);
-$('sort').addEventListener('change', render);
+$('search').addEventListener('input', () => { clearAiMode(); render(); });
+$('sort').addEventListener('change', () => { clearAiMode(); render(); });
 loadButton.addEventListener('click', loadParkingList);
 mobileRefresh.addEventListener('click', loadParkingList);
 $('clear-search').addEventListener('click', () => {
   $('search').value = '';
+  clearAiMode();
   render();
   $('search').focus();
 });
 document.querySelectorAll('[data-filter]').forEach(button => {
   button.addEventListener('click', () => {
+    clearAiMode();
     activeFilter = button.dataset.filter;
     updateFilterButtons();
     render();
@@ -253,6 +262,7 @@ loadParkingList();
 // 오프라인에서는 이전 빈자리를 현재 정보로 표시하지 않습니다.
 function showOffline() {
   data = null;
+  clearAiMode();
   parkingList.replaceChildren();
   resetStats();
   $('last-checked').textContent = '오프라인 · 실시간 조회 불가';
@@ -375,6 +385,7 @@ if (qrInstallVisit && !standalone.matches && navigator.standalone !== true) {
 document.querySelectorAll('[data-search]').forEach(button => {
   button.addEventListener('click', () => {
     $('search').value = button.dataset.search;
+    clearAiMode();
     render();
     $('search').focus();
   });
@@ -394,6 +405,24 @@ function updateQRLayout() {
 }
 qrLayout.addEventListener('change', updateQRLayout);
 updateQRLayout();
+
+
+function clearAiMode() {
+  aiCodes = null;
+  aiRank = new Map();
+  $('ai-list-mode').hidden = true;
+}
+function activateAiResults(codes) {
+  const unique = [...new Set(codes.map(String).filter(Boolean))].slice(0,20);
+  aiCodes = new Set(unique);
+  aiRank = new Map(unique.map((code,index)=>[code,index]));
+  $('search').value = '';
+  activeFilter = 'all';
+  updateFilterButtons();
+  render();
+}
+$('ai-reset-list').addEventListener('click', () => { resetFilters(); $('results-title').scrollIntoView({behavior:'smooth',block:'start'}); });
+$('ai-see-results').addEventListener('click', () => $('results-title').scrollIntoView({behavior:'smooth',block:'start'}));
 
 // 개인 과제용 AI 검색: 브라우저는 Gemini API 키를 전달받지 않습니다.
 const aiForm = $('ai-form');
@@ -418,9 +447,30 @@ aiForm.addEventListener('submit', async event => {
     });
     const result = await response.json();
     if (!response.ok) throw new Error(result.message || 'AI 검색에 실패했습니다.');
-    answer.textContent = result.answer || '답변을 생성하지 못했습니다. 질문을 바꿔 다시 시도해 주세요.';
+    const codes = Array.isArray(result.parkingCodes) ? result.parkingCodes.filter(code=>typeof code==='string' && code.length>0) : [];
+    const summary = String(result.answer??'').trim();
+    const matched = codes.length ? codes.filter(code=>data?.parkingList?.some(p=>String(p.parkgcd)===code)) : [];
+    answer.replaceChildren();
+    const title = element('h3', matched.length ? '주차장 검색 결과' : 'AI 답변', 'ai-answer-title');
+    answer.append(title);
+    const text = element('p', matched.length ? `질문에 맞는 주차장 ${matched.length}곳을 찾았습니다. 자세한 빈자리·요금·지도 정보는 아래 기존 주차장 카드에서 확인하세요.` : summary || '답변을 생성하지 못했습니다.', 'ai-summary');
+    answer.append(text);
+    if(matched.length) {
+      activateAiResults(matched);
+      const button = element('button', `검색 결과 ${matched.length}곳 보기 ↓`, 'ai-results-button');
+      button.type='button';
+      button.addEventListener('click',()=> $('results-title').scrollIntoView({behavior:'smooth',block:'start'}));
+      answer.append(button);
+      $('ai-see-results').hidden=false;
+    } else {
+      clearAiMode();
+      render();
+      $('ai-see-results').hidden=true;
+      if(codes.length && !data) answer.append(element('p','주차장 목록을 아직 불러오지 못했습니다. 인터넷 연결 후 새로고침해 주세요.','ai-meta'));
+    }
+    answer.append(element('p', 'AI 안내는 제공기관의 조회 자료를 기준으로 하며, 빈자리는 도착 시 달라질 수 있습니다.', 'ai-meta'));
     answer.hidden = false;
-    status.textContent = '답변 완료' + (result.toolsUsed?.length ? ' · 주차장 데이터 조회 사용' : ' · 데이터 조회 없이 생성');
+    status.textContent = '답변 완료' + (result.toolsUsed?.length ? ' · 주차장 데이터 조회 사용' : ' · 주차장 목록 변경 없음');
   } catch (error) {
     status.textContent = error.name === 'TimeoutError' ? '응답 시간이 초과되었습니다.' : error.message;
   } finally {
