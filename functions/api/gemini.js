@@ -21,7 +21,19 @@ export async function onRequestPost(context){
  try {input=JSON.parse(raw);}catch{return json({message:'JSON 요청이 필요합니다.'},400);}
  const question=String(input?.question??'').trim();
  if(!question||question.length>300) return json({message:'질문은 1~300자로 입력해 주세요.'},400);
- const declarations=tools.map(({definition:d})=>({name:d.name,description:d.description,parameters:d.inputSchema}));
+ // MCP inputSchema is JSON Schema; Gemini function declarations accept a smaller subset.
+ // Do not send MCP-specific additionalProperties (can cause INVALID_ARGUMENT).
+ const declarations=tools.map(({definition:d})=>({
+   name:d.name,
+   description:d.description,
+   parameters:{
+     type:'object',
+     properties:Object.fromEntries(Object.entries(d.inputSchema.properties??{}).map(([name,schema])=>
+       [name,{type:schema.type,description:schema.description??''}]
+     )),
+     ...(d.inputSchema.required?.length?{required:d.inputSchema.required}:{})
+   }
+ }));
  const contents=[{role:'user',parts:[{text:question}]}];
  const request={contents,systemInstruction:{parts:[{text:'당신은 부산 공영주차장 정보 안내자입니다. 주차장 빈자리·주소·요금은 반드시 도구 조회 결과로만 답하세요. 조회 불가 정보는 추측하지 마세요. 빈자리는 제공기관 갱신 당시 수치이며 현장에서 달라질 수 있음을 안내하세요. 한국어로 간결하게 답하세요.'}]},tools:[{functionDeclarations:declarations}],generationConfig:{temperature:0.2,maxOutputTokens:800}};
  try{
