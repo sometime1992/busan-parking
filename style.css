@@ -139,3 +139,15 @@ select { display:block; width:100%; margin-top:8px; padding:11px; border:1px sol
   .install-qr-content .qr-description { font-size:12px; text-align:center; }
   .install-qr-content .install-qr { max-width:230px; margin:0 auto; }
 }
+
+/* V6 수업 과제용 Gemini 검색: 기존 스타일과 호환 */
+.ai-panel{margin:20px 0 25px;padding:24px;background:#fff;border:1px solid #dce5f4;border-radius:18px;box-shadow:0 8px 24px #183b7110}
+.ai-heading{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:17px}
+.ai-heading h2{margin:4px 0 7px;font-size:21px;color:#182f55}.ai-heading p:last-child{font-size:12px;color:#63748c;margin:0}
+.ai-chip{white-space:nowrap;color:#2557cf;background:#eaf0ff;border-radius:100px;font-size:12px;font-weight:700;padding:7px 11px}
+.ai-form{display:grid;gap:9px}.ai-form label{font-size:12px;font-weight:700;color:#344b70}
+.ai-form input{min-width:0;width:100%;border:1px solid #cfdbee;border-radius:10px;min-height:45px;padding:11px;font-size:14px;background:white;color:#213c62}
+.ai-question-row{display:flex;gap:9px}.ai-question-row button{border:0;border-radius:10px;padding:0 18px;min-height:45px;background:#2458e6;color:#fff;font-weight:700;cursor:pointer;white-space:nowrap}
+.ai-question-row button:disabled{opacity:.55;cursor:wait}.ai-hint{font-size:11px;color:#697c91;margin:12px 0}
+#ai-status{font-size:12px;color:#3a608e;min-height:18px}.ai-answer{white-space:pre-wrap;overflow-wrap:anywhere;margin-top:12px;border-radius:12px;background:#f2f6fd;padding:17px;line-height:1.75;font-size:14px;color:#243956}
+@media(max-width:600px){.ai-panel{padding:17px 15px}.ai-heading h2{font-size:18px}.ai-question-row{flex-direction:column}.ai-question-row button{width:100%}}
