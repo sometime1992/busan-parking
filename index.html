@@ -32,6 +32,19 @@
       <div><span class="stat-caption"><i class="stat-symbol" aria-hidden="true">?</i>빈자리 확인 불가</span><strong id="stat-unknown">—</strong><small>곳</small></div>
     </section>
     <p id="connection-status" class="notice warning" role="status" aria-live="polite" hidden></p>
+
+    <section class="ai-panel" aria-labelledby="ai-title">
+      <div class="ai-heading"><div><p class="section-eyebrow">GEMINI · AI PARKING SEARCH</p><h2 id="ai-title">AI에게 주차장 물어보기</h2><p>수업 과제용 개인 테스트 · 공공데이터 기반 안내</p></div><span class="ai-chip">AI 검색</span></div>
+      <form id="ai-form" class="ai-form">
+        <label for="ai-token">개인 테스트 암호</label>
+        <input id="ai-token" type="password" autocomplete="off" placeholder="Cloudflare AI_TEST_TOKEN 값" required>
+        <label for="ai-question">주차장 질문</label>
+        <div class="ai-question-row"><input id="ai-question" type="text" maxlength="300" placeholder="예: 부산에서 빈자리 많은 주차장 5곳 알려줘" required><button type="submit" id="ai-submit">AI 검색</button></div>
+      </form>
+      <p class="ai-hint">암호는 브라우저 저장소에 저장하지 않습니다. 요금·빈자리는 현장 상황과 다를 수 있습니다.</p>
+      <div id="ai-status" role="status" aria-live="polite"></div>
+      <div id="ai-answer" class="ai-answer" aria-live="polite" hidden></div>
+    </section>
     <div class="workspace">
     <aside class="search-panel" aria-label="주차장 검색 및 필터">
       <form id="search-form" role="search">
