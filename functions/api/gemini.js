@@ -1,5 +1,5 @@
 // Gemini Function Calling bridge. Existing site files are untouched.
-// Protect endpoint with a separate AI_TEST_TOKEN Cloudflare secret.
+// Classroom demo endpoint: public access, no browser API key exposure. Apply rate limiting before wider release.
 import * as search from '../../mcp/tools/searchParking.js';
 import * as free from '../../mcp/tools/findAvailableParking.js';
 import * as detail from '../../mcp/tools/getParkingDetail.js';
@@ -13,18 +13,12 @@ async function generate(key,body){
  return response.json();
 }
 export async function onRequestPost(context){
- const secret=String(context.env.AI_TEST_TOKEN??'');
- if(!secret) return json({message:'AI_TEST_TOKEN 비밀 변수 등록 후 테스트할 수 있습니다.'},503);
- const token=context.request.headers.get('x-ai-test-token')??'';
- // Constant-time-like comparison to avoid trivial early differences.
- const a=new TextEncoder().encode(token),b=new TextEncoder().encode(secret);
- let mismatch=a.length^b.length;
- for(let i=0;i<Math.max(a.length,b.length);i++) mismatch|=(a[i]??0)^(b[i]??0);
- if(mismatch!==0) return json({message:'인증되지 않은 요청입니다.'},401);
  const key=String(context.env.GEMINI_API_KEY??'').trim();
  if(!key) return json({message:'GEMINI_API_KEY 비밀 변수가 설정되지 않았습니다.'},503);
+ const raw = await context.request.text();
+ if(raw.length > 2048) return json({message:'요청이 너무 깁니다.'},413);
  let input;
- try {input=await context.request.json();}catch{return json({message:'JSON 요청이 필요합니다.'},400);}
+ try {input=JSON.parse(raw);}catch{return json({message:'JSON 요청이 필요합니다.'},400);}
  const question=String(input?.question??'').trim();
  if(!question||question.length>300) return json({message:'질문은 1~300자로 입력해 주세요.'},400);
  const declarations=tools.map(({definition:d})=>({name:d.name,description:d.description,parameters:d.inputSchema}));
