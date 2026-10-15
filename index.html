@@ -41,6 +41,7 @@
       </form>
       <p class="ai-hint">AI 검색은 사용량이 발생할 수 있습니다. 요금·빈자리는 현장 상황과 다를 수 있습니다.</p>
       <div id="ai-status" role="status" aria-live="polite"></div>
+      <button type="button" id="ai-see-results" hidden>주차장 검색 결과 보기 ↓</button>
       <div id="ai-answer" class="ai-answer" aria-live="polite" hidden></div>
     </section>
     <div class="workspace">
@@ -62,6 +63,7 @@
       <div class="sidebar-tip"><span class="tip-symbol" aria-hidden="true">i</span><p>빈자리는 제공기관 갱신 기준입니다.<br>출발 전 확인하고, 현장 안내를 우선해 주세요.</p></div>
     </aside>
     <section class="results" aria-labelledby="results-title">
+      <div id="ai-list-mode" class="ai-list-mode" hidden><span id="ai-list-count">0곳</span> · AI 검색 결과만 표시 중 <button id="ai-reset-list" type="button">전체 목록 보기</button></div>
       <div class="results-heading"><div><p class="section-eyebrow">PARKING SPACES</p><h2 id="results-title">주차장 목록 <span id="result-count"></span></h2><p id="last-checked" class="note">인터넷 연결 후 주차 정보를 조회합니다.</p></div><div class="refresh-controls"><label class="auto"><input id="auto-refresh" type="checkbox">5분 자동갱신</label><button id="load-button" type="button" class="secondary-button">↻ 새로고침</button></div></div>
       <div class="list-toolbar"><span class="list-hint">빈자리와 갱신시간을 함께 확인하세요.</span><div class="view-switch" role="group" aria-label="목록 보기 방식"><button id="view-grid" type="button" aria-label="카드 보기" aria-pressed="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></button><button id="view-list" type="button" aria-label="간결한 목록 보기" aria-pressed="false"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5h12M9 12h12M9 19h12M3 5h1M3 12h1M3 19h1"/></svg></button></div></div>
       <p id="status" role="status" aria-live="polite">주차장 정보를 불러오는 중입니다.</p>
