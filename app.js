@@ -394,3 +394,38 @@ function updateQRLayout() {
 }
 qrLayout.addEventListener('change', updateQRLayout);
 updateQRLayout();
+
+// 개인 과제용 AI 검색: 브라우저는 Gemini API 키를 전달받지 않습니다.
+const aiForm = $('ai-form');
+aiForm.addEventListener('submit', async event => {
+  event.preventDefault();
+  const password = $('ai-token').value;
+  const question = $('ai-question').value.trim();
+  const submit = $('ai-submit');
+  const answer = $('ai-answer');
+  const status = $('ai-status');
+  if (!password || !question) return;
+  submit.disabled = true;
+  submit.textContent = '답변 생성 중…';
+  answer.hidden = true;
+  status.textContent = 'Gemini가 주차장 정보를 확인하고 있습니다.';
+  try {
+    const response = await fetch('/api/gemini', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json','x-ai-test-token':password},
+      body: JSON.stringify({question}),
+      cache:'no-store',
+      signal:AbortSignal.timeout(45000)
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || 'AI 검색에 실패했습니다.');
+    answer.textContent = result.answer || '답변을 생성하지 못했습니다. 질문을 바꿔 다시 시도해 주세요.';
+    answer.hidden = false;
+    status.textContent = '답변 완료' + (result.toolsUsed?.length ? ' · 주차장 데이터 조회 사용' : ' · 데이터 조회 없이 생성');
+  } catch (error) {
+    status.textContent = error.name === 'TimeoutError' ? '응답 시간이 초과되었습니다.' : error.message;
+  } finally {
+    submit.disabled = false;
+    submit.textContent = 'AI 검색';
+  }
+});
