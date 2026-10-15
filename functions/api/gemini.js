@@ -40,17 +40,32 @@ export async function onRequestPost(context){
   let called=[];
   let parkingCodes=[];
   let parkingResults=[];
-  for(let round=0;round<2;round++){
-   const output=await generate(key,request);
+  const toolCache=new Map();
+  const MAX_TOOL_CALLS=8;
+  let totalCalls=0;
+  const fallback=(reason)=>json({answer:parkingCodes.length ? `조회된 주차장 ${parkingCodes.length}곳을 아래 목록에서 확인할 수 있습니다. AI 답변은 ${reason} 완료되지 않았습니다.` : `조회 결과를 완성하지 못했습니다. ${reason} 질문을 바꿔 다시 시도해 주세요.`,parkingCodes,parkingResults,toolsUsed:called,partial:true,model:'gemini-3.5-flash-lite'});
+  for(let round=0;round<4;round++){
+   let output;
+   try { output=await generate(key,request); }
+   catch(error) { if(parkingCodes.length) return fallback('Gemini 응답 오류로'); throw error; }
    const candidate=output.candidates?.[0]?.content;
-   if(!candidate?.parts?.length) throw new Error('Gemini 응답 내용이 없습니다.');
+   if(!candidate?.parts?.length) { if(parkingCodes.length) return fallback('응답 내용이 없어'); throw new Error('Gemini 응답 내용이 없습니다.'); }
    contents.push(candidate);
    const calls=candidate.parts.filter(p=>p.functionCall).map(p=>p.functionCall);
    if(!calls.length) return json({answer:candidate.parts.filter(p=>typeof p.text==='string').map(p=>p.text).join('\\n'),parkingCodes,parkingResults,toolsUsed:called,model:'gemini-3.5-flash-lite'});
    const responses=[];
    for(const c of calls.slice(0,3)){
     const t=map.get(c.name);
-    const result=t?await t.run(c.args??{},context):{error:'허용되지 않은 도구'};
+    const cacheKey=JSON.stringify([c.name,c.args??{}]);
+    let result;
+    if(toolCache.has(cacheKey)) result=toolCache.get(cacheKey);
+    else if(totalCalls>=MAX_TOOL_CALLS) result={error:'도구 호출 횟수 제한'};
+    else {
+      totalCalls++;
+      try { result=t?await t.run(c.args??{},context):{error:'허용되지 않은 도구'}; }
+      catch(error) { result={error:error instanceof Error?error.message:'조회 실패'}; }
+      toolCache.set(cacheKey,result);
+    }
     if(t) {
       const rows=Array.isArray(result?.results) ? result.results : (result?.code ? [result] : []);
       for(const item of rows){
@@ -66,7 +81,7 @@ export async function onRequestPost(context){
    }
    contents.push({role:'user',parts:responses});
   }
-  return json({message:'도구 호출 반복 제한에 도달했습니다.',toolsUsed:called,parkingCodes},502);
+  return fallback('도구 호출 반복 제한으로');
  }catch(error){return json({message:error instanceof Error?error.message:'Gemini 연결 오류'},502);}
 }
 export const onRequestGet=()=>json({message:'POST 방식으로만 테스트할 수 있습니다.'},405);
