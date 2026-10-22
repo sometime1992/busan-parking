@@ -1,5 +1,5 @@
 // 정적 파일을 변경할 때 CACHE_NAME의 버전도 올려 주세요.
-const CACHE_NAME = 'busan-parking-v6-dual-distance-voice-20261022-10';
+const CACHE_NAME = 'busan-parking-v6-standard-gps-distances-20261022-11';
 const STATIC_FILES = ['./', './index.html', './style.css', './app.js', './manifest.webmanifest', './icon-192.png', './icon-512.png', './install-qr.png'];
 const STATIC_URLS = new Set(STATIC_FILES.map(path => new URL(path, self.registration.scope).href));
 self.addEventListener('install', event => {
