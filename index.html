@@ -49,7 +49,7 @@
       <form id="search-form" role="search">
         <p class="section-eyebrow">FIND YOUR PARKING</p><label for="search">어디에 주차할까요?</label>
         <div class="search-row"><input id="search" type="search" placeholder="주차장 이름을 입력하세요" autocomplete="off"><button id="clear-search" class="clear-button" type="button" aria-label="검색어 지우기" hidden>×</button><button type="submit" class="search-button" aria-label="주차장 검색"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4.5 4.5"/></svg></button></div>
-        <p class="search-distance-help">거리 표시: 위의 ‘현재 위치 사용’을 켜고 검색하세요.</p>
+        <button type="button" id="search-distance-action" class="search-distance-action">📍 현재 위치로 거리 계산</button><p class="search-distance-help">상단 AI 검색과 위치 설정을 공유합니다. 거리는 최대 10곳의 자동차 경로와 전체 직선거리로 구분해 표시합니다.</p>
         <p id="search-distance-status" class="search-distance-status" role="status" aria-live="polite"></p>
       </form>
       <div class="quick-search" aria-label="검색 예시"><span>예시</span><button type="button" data-search="화명">화명</button><button type="button" data-search="장산역">장산역</button><button type="button" data-search="대연">대연</button></div>
