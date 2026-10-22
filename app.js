@@ -428,6 +428,7 @@ const aiForm = $('ai-form');
 aiForm.addEventListener('submit', async event => {
   event.preventDefault();
   const question = $('ai-question').value.trim();
+  const useLocation=$('ai-use-location').checked || /내 위치|현재 위치|내 주변|가까운|근처|주변 주차장/.test(question);
   const submit = $('ai-submit');
   const answer = $('ai-answer');
   const status = $('ai-status');
@@ -437,10 +438,18 @@ aiForm.addEventListener('submit', async event => {
   answer.hidden = true;
   status.textContent = 'Gemini가 주차장 정보를 확인하고 있습니다.';
   try {
+    let location;
+    if(useLocation){
+      status.textContent='위치 권한을 확인하고 있습니다.';
+      if(!navigator.geolocation) throw new Error('이 브라우저는 위치 기능을 지원하지 않습니다.');
+      const position=await new Promise((resolve,reject)=>navigator.geolocation.getCurrentPosition(resolve,reject,{enableHighAccuracy:true,timeout:12000,maximumAge:0}));
+      location={latitude:position.coords.latitude,longitude:position.coords.longitude};
+      status.textContent='현재 위치 주변 주차장을 검색하고 있습니다.';
+    }
     const response = await fetch('/api/gemini', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({question}),
+      body: JSON.stringify({question,...(location?{location}:{})}),
       cache:'no-store',
       signal:AbortSignal.timeout(45000)
     });
@@ -470,7 +479,7 @@ aiForm.addEventListener('submit', async event => {
     answer.hidden = false;
     status.textContent = '답변 완료' + (result.toolsUsed?.length ? ' · 주차장 데이터 조회 사용' : ' · 주차장 목록 변경 없음');
   } catch (error) {
-    status.textContent = error.name === 'TimeoutError' ? '응답 시간이 초과되었습니다.' : error.message;
+    status.textContent = error.code===1 ? '위치 권한이 거부되었습니다. 브라우저 위치 접근을 허용해 주세요.' : error.code===3 ? 'GPS 위치 조회 시간이 초과되었습니다.' : error.name === 'TimeoutError' ? '응답 시간이 초과되었습니다.' : error.message;
   } finally {
     submit.disabled = false;
     submit.textContent = 'AI 검색';
