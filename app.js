@@ -10,6 +10,7 @@ let timer = null;
 let activeFilter = 'all';
 let aiCodes = null;
 let aiRank = new Map();
+let aiDistances = new Map();
 const openDetails = new Set();
 const mobileRefresh = $('mobile-refresh');
 const mobileRefreshLabel = $('mobile-refresh-label');
@@ -101,6 +102,10 @@ function render() {
     top.append(element('span', 'P', 'parking-symbol'));
     top.append(element('h3', value(p.parknm)), element('span', unknown ? '확인 불가' : p.curravacnt === 0 ? '만차' : '주차 가능', `badge ${state}`));
     card.append(top);
+    if(aiDistances.has(String(p.parkgcd))) {
+      const meters=aiDistances.get(String(p.parkgcd));
+      card.append(element('p', meters<1000 ? `현재 위치에서 직선거리 약 ${meters}m` : `현재 위치에서 직선거리 약 ${(meters/1000).toFixed(1)}km`, 'ai-card-distance'));
+    }
     const address = element('p', value(p.doroAddr ?? p.jibunAddr), 'address-preview');
     address.append(element('small', '주소 · 공공데이터 기준'));
     card.append(address);
@@ -410,6 +415,7 @@ updateQRLayout();
 function clearAiMode() {
   aiCodes = null;
   aiRank = new Map();
+  aiDistances = new Map();
   $('ai-list-mode').hidden = true;
 }
 function activateAiResults(codes) {
@@ -466,6 +472,8 @@ aiForm.addEventListener('submit', async event => {
     answer.append(text);
     if(matched.length) {
       activateAiResults(matched);
+      aiDistances=new Map((result.parkingResults??[]).filter(p=>Number.isFinite(p.distanceMeters)).map(p=>[String(p.code),p.distanceMeters]));
+      render();
       const button = element('button', `검색 결과 ${matched.length}곳 보기 ↓`, 'ai-results-button');
       button.type='button';
       button.addEventListener('click',()=> $('results-title').scrollIntoView({behavior:'smooth',block:'start'}));
