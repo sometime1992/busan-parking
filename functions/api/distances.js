@@ -8,7 +8,7 @@ export async function onRequestPost(context){
   body=JSON.parse(raw);
  }catch{return json({message:'잘못된 요청입니다.'},400);}
  const gps=body?.location, codes=body?.parkingCodes;
- if(!gps||!Number.isFinite(gps.latitude)||!Number.isFinite(gps.longitude)||gps.latitude<34||gps.latitude>36.5||gps.longitude<128||gps.longitude>131)return json({message:'부산 지역의 GPS 정보가 필요합니다.'},400);
+ if(!gps||!Number.isFinite(gps.latitude)||!Number.isFinite(gps.longitude)||gps.latitude<33||gps.latitude>39.5||gps.longitude<124||gps.longitude>132)return json({message:'대한민국 범위의 GPS 정보가 필요합니다.'},400);
  if(!Array.isArray(codes)||codes.length<1||codes.length>10||codes.some(c=>typeof c!=='string'||c.length>80))return json({message:'주차장 코드는 최대 10개까지 선택해 주세요.'},400);
  try{return await drivingNearby(context,gps,'자동차 거리 '+codes.length+'곳',codes);}
  catch(error){return json({message:error instanceof Error?error.message:'경로 확인 실패'},502);}
