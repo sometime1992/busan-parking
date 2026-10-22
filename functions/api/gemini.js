@@ -8,6 +8,7 @@ import {getParking} from '../../mcp/tools/data.js';
 import {nearby as nearest,point} from '../../lib/nearbyParking.js';
 import {verifyParkingPlace} from '../../lib/verifyParkingPlace.js';
 import {mappedParkingPlace} from '../../lib/verifiedParkingLocations.js';
+import {geocodeParkingAddress} from '../../lib/geocodeParkingAddress.js';
 const tools=[search,free,detail,nearby];
 const map=new Map(tools.map(t=>[t.definition.name,t]));
 const json=(body,status=200)=>new Response(JSON.stringify(body),{status,headers:{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
@@ -70,7 +71,7 @@ async function drivingNearby(context,gps,question){
   while(verifyIndex<candidates.length){
    const i=verifyIndex++;
    const p=candidates[i];
-   try{const place=mappedParkingPlace(p)??await verifyParkingPlace(p,key,context);if(place)verified[i]={...p,verifiedPlace:place};}
+   try{const place=mappedParkingPlace(p)??await verifyParkingPlace(p,key,context)??await geocodeParkingAddress(p,key);if(place)verified[i]={...p,verifiedPlace:place};}
    catch{/* 카카오 장소 미확인: 공공데이터 좌표로 길찾기를 강행하지 않습니다. */}
   }
  }));
@@ -94,11 +95,11 @@ async function drivingNearby(context,gps,question){
  if(!display.length) return json({message:'표시할 주차장 후보가 없습니다.'},404);
  const failed=settled.filter(r=>r.status==='rejected').length;
  const partial=supplemental.length>0||successful.length<limit||failed>0||verifiedCandidates.length<candidates.length;
- const notice=`주변 후보 ${candidates.length}곳 중 카카오 장소가 확인된 ${verifiedCandidates.length}곳을 자동차 경로로 비교했습니다. 미검증 후보 ${supplemental.length}곳은 뒤에 별도로 표시하며, 거리를 제공하지 않고 자동차 최단거리 순위에 포함하지 않습니다.`;
+ const notice=`주변 후보 ${candidates.length}곳 중 목적지 좌표를 확인한 ${verifiedCandidates.length}곳의 자동차 경로를 계산했습니다. 주소 기준 거리는 주차장 진입로까지의 거리와 다를 수 있습니다. 미확인 후보 ${supplemental.length}곳에는 거리를 표시하지 않습니다.`;
  return json({
   answer:`자동차 경로가 확인된 ${successful.length}곳과 추가 주차장 후보 ${supplemental.length}곳을 찾았습니다.`,
   parkingCodes:display.map(p=>String(p.parkgcd)),
-  parkingResults:display.map(p=>({code:String(p.parkgcd),name:p.parknm,availableSpaces:p.curravacnt,...(Number.isFinite(p.drivingMeters)?{drivingMeters:p.drivingMeters,drivingSeconds:p.drivingSeconds,verifiedPlace:p.verifiedPlace} :{locationUnverified:true})})),
+  parkingResults:display.map(p=>({code:String(p.parkgcd),name:p.parknm,availableSpaces:p.curravacnt,...(Number.isFinite(p.drivingMeters)?{drivingMeters:p.drivingMeters,drivingSeconds:p.drivingSeconds,verifiedPlace:p.verifiedPlace,routeBasis:p.verifiedPlace?.source==='address_geocoded'?'address':'place'} :{locationUnverified:true})})),
   toolsUsed:['findNearbyParking','kakaoDirections'],routeMode:'driving',
   routeStats:{candidates:candidates.length,verified:verifiedCandidates.length,unverified:candidates.length-verifiedCandidates.length,failed,limit:MAX_ROUTE_CANDIDATES},
   notice,partial
