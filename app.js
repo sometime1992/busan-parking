@@ -138,13 +138,13 @@ function render() {
     const link = element('a', validPoint ? '카카오맵에서 주차장 위치 확인 ↗' : '카카오맵에서 주차장명 검색 ↗', 'map-link');
     const verifiedPlace=aiVerifiedPlaces.get(String(p.parkgcd));
     const trustedPlaceUrl = typeof verifiedPlace?.placeUrl === 'string' && (verifiedPlace.placeUrl.startsWith('http://place.map.kakao.com/') || verifiedPlace.placeUrl.startsWith('https://place.map.kakao.com/'));
-    link.href = trustedPlaceUrl ? verifiedPlace.placeUrl : `https://map.kakao.com/link/search/${encodeURIComponent('부산 '+label+' 주차장')}`;
-    link.textContent=verifiedPlace?'카카오맵에서 확인된 주차장 보기 ↗':'카카오맵에서 주차장명 검색 ↗';
+    link.href = trustedPlaceUrl ? verifiedPlace.placeUrl : `https://map.kakao.com/link/search/${encodeURIComponent('부산 '+label+' 공영주차장')}`;
+    link.textContent=trustedPlaceUrl?'카카오맵에서 확인된 공영주차장 보기 ↗':'카카오맵에서 공영주차장 검색 ↗';
     link.target = '_blank';
     link.rel = 'noopener noreferrer';
     link.setAttribute('aria-label', `${p.parknm} 카카오맵에서 ${trustedPlaceUrl ? '확인된 장소 보기' : '이름 검색'} (새 창)`);
     card.append(link);
-    if (!verifiedPlace) card.append(element('p','카카오 등록 장소와 일치 여부가 검증되지 않았습니다. 지도 검색 결과를 직접 확인해 주세요.','map-location-note'));
+    if (!trustedPlaceUrl) card.append(element('p','카카오 등록 장소와 일치 여부가 검증되지 않았습니다. 지도 검색 결과를 직접 확인해 주세요.','map-location-note'));
     const details = element('details', undefined, 'card-details');
     const key = String(p.parkgcd ?? p.parknm);
     details.open = openDetails.has(key);
