@@ -61,7 +61,7 @@ export async function drivingNearby(context,gps,question,selectedCodes=null){
  // 후보는 직선거리로만 1차 선별합니다. 최종 순위는 반드시 실제 자동차 경로로 계산합니다.
  const source=Array.isArray(selectedCodes)?list.parkingList.filter(p=>selectedCodes.includes(String(p.parkgcd))):list.parkingList;
  const candidates=nearest(source,gps.latitude,gps.longitude,{
-  limit:MAX_ROUTE_CANDIDATES,radius:20000,
+  limit:MAX_ROUTE_CANDIDATES,radius:Array.isArray(selectedCodes)?600000:20000,
   onlyAvailable:Array.isArray(selectedCodes)?false:!(/빈자리 상관없이|만차도|전체 주차장/.test(question))
  });
  if(!candidates.length) return json({answer:'GPS 좌표와 주차장 좌표가 확인되는 주변 주차장을 찾지 못했습니다.',parkingCodes:[],parkingResults:[],toolsUsed:['findNearbyParking'],routeMode:'driving'});
@@ -116,7 +116,7 @@ export async function onRequestPost(context){
  try {input=JSON.parse(raw);}catch{return json({message:'JSON 요청이 필요합니다.'},400);}
  const question=String(input?.question??'').trim();
  const gps=input?.location;
- const validGps=gps&&Number.isFinite(gps.latitude)&&Number.isFinite(gps.longitude)&&gps.latitude>=34&&gps.latitude<=36.5&&gps.longitude>=128&&gps.longitude<=131;
+ const validGps=gps&&Number.isFinite(gps.latitude)&&Number.isFinite(gps.longitude)&&gps.latitude>=33&&gps.latitude<=39.5&&gps.longitude>=124&&gps.longitude<=132;
  if(!question||question.length>300) return json({message:'질문은 1~300자로 입력해 주세요.'},400);
  if(validGps && /내 위치|현재 위치|내 주변|가까운|근처|주변 주차장/.test(question)) {
    try { return await drivingNearby(context,gps,question); }
