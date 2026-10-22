@@ -363,6 +363,10 @@ $('search-form').addEventListener('submit',async event=>{
  }
 });
 $('ai-use-location').addEventListener('change',()=>{clearOrdinaryDistances();render();});
+$('search-distance-action').addEventListener('click',()=>{
+  $('ai-use-location').checked=true;
+  $('search-form').requestSubmit();
+});
 $('search').addEventListener('input', () => { clearOrdinaryDistances(); clearAiMode(); render(); });
 $('sort').addEventListener('change', () => { clearOrdinaryDistances(); clearAiMode(); render(); });
 loadButton.addEventListener('click', loadParkingList);
@@ -543,6 +547,10 @@ function clearAiMode() {
   ordinaryDistanceRequest++;
   ordinaryDistanceMode=false;
   ordinaryDistanceCodes=new Set();
+  ordinaryDistances=new Map();
+  ordinaryDriving=new Map();
+  ordinaryVerifiedPlaces=new Map();
+  $('search-distance-status').textContent='';
   aiCodes = null;
   aiRank = new Map();
   aiDistances = new Map();
@@ -621,6 +629,7 @@ aiForm.addEventListener('submit', async event => {
       if(!navigator.geolocation) throw new Error('이 브라우저는 위치 기능을 지원하지 않습니다.');
       const position=await new Promise((resolve,reject)=>navigator.geolocation.getCurrentPosition(resolve,reject,{enableHighAccuracy:true,timeout:12000,maximumAge:0}));
       location={latitude:position.coords.latitude,longitude:position.coords.longitude};
+      $('ai-use-location').checked=true;
       status.textContent='현재 위치 주변 주차장을 검색하고 있습니다.';
     }
     const response = await fetch('/api/gemini', {
