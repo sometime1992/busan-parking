@@ -492,7 +492,7 @@ if(!SpeechRecognition){
     }
   });
   recognizer.addEventListener('error',event=>{
-    const messages={not\u002dallowed:'마이크 권한이 거부되었습니다. 브라우저 권한을 확인해 주세요.',no\u002dspeech:'음성을 인식하지 못했습니다. 다시 시도해 주세요.',network:'음성인식 연결에 실패했습니다. 키보드 검색은 계속 사용할 수 있습니다.',audio\u002dcapture:'마이크를 사용할 수 없습니다.'};
+    const messages={'not-allowed':'마이크 권한이 거부되었습니다. 브라우저 권한을 확인해 주세요.','no-speech':'음성을 인식하지 못했습니다. 다시 시도해 주세요.',network:'음성인식 연결에 실패했습니다. 키보드 검색은 계속 사용할 수 있습니다.','audio-capture':'마이크를 사용할 수 없습니다.'};
     $('ai-status').textContent=messages[event.error]||'음성인식을 완료하지 못했습니다. 다시 시도해 주세요.';
   });
   recognizer.addEventListener('end',()=>voiceButton.setAttribute('aria-pressed','false'));
