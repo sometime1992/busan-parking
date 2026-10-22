@@ -127,12 +127,22 @@ function render() {
     }
     card.append(element('p', `현재 주차 ${number(p.parkingcnt)} / 전체 ${number(p.maxcnt)}`, 'capacity'));
     card.append(element('p', `제공기관 갱신 · ${date(p.lastupdatetime)}`, 'card-update'));
-    const link = element('a', '카카오맵에서 위치 확인 ↗', 'map-link');
-    link.href = `https://map.kakao.com/link/search/${encodeURIComponent(`부산 ${p.parknm}`)}`;
+    // 좌표가 있으면 카카오맵의 '이름,위도,경도' 링크로 주차장명을 명시합니다.
+    // 검색만으로는 카카오맵이 주차장명 대신 유사 주소를 선택할 수 있습니다.
+    const longitude = Number(p.xCdnt), latitude = Number(p.yCdnt);
+    const validPoint = p.xCdnt != null && p.yCdnt != null
+      && Number.isFinite(latitude) && Number.isFinite(longitude)
+      && latitude >= 34.5 && latitude <= 36 && longitude >= 128.5 && longitude <= 130;
+    const label = String(p.parknm ?? '').trim();
+    const link = element('a', validPoint ? '카카오맵에서 주차장 위치 확인 ↗' : '카카오맵에서 주차장명 검색 ↗', 'map-link');
+    link.href = validPoint
+      ? `https://map.kakao.com/link/map/${encodeURIComponent(label)},${latitude},${longitude}`
+      : `https://map.kakao.com/link/search/${encodeURIComponent('부산 '+label)}`;
     link.target = '_blank';
     link.rel = 'noopener noreferrer';
-    link.setAttribute('aria-label', `${p.parknm} 카카오맵에서 위치 확인 (새 창)`);
+    link.setAttribute('aria-label', `${p.parknm} 카카오맵에서 ${validPoint ? '공공데이터 좌표로 위치 확인' : '이름 검색'} (새 창)`);
     card.append(link);
+    if (validPoint) card.append(element('p','지도 위치는 공공데이터 좌표 기준이며 실제 주차장 입구와 다를 수 있습니다.','map-location-note'));
     const details = element('details', undefined, 'card-details');
     const key = String(p.parkgcd ?? p.parknm);
     details.open = openDetails.has(key);
