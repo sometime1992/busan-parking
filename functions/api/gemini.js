@@ -3,7 +3,8 @@
 import * as search from '../../mcp/tools/searchParking.js';
 import * as free from '../../mcp/tools/findAvailableParking.js';
 import * as detail from '../../mcp/tools/getParkingDetail.js';
-const tools=[search,free,detail];
+import * as nearby from '../../mcp/tools/findNearbyParking.js';
+const tools=[search,free,detail,nearby];
 const map=new Map(tools.map(t=>[t.definition.name,t]));
 const json=(body,status=200)=>new Response(JSON.stringify(body),{status,headers:{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
 const endpoint='https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent';
@@ -20,6 +21,8 @@ export async function onRequestPost(context){
  let input;
  try {input=JSON.parse(raw);}catch{return json({message:'JSON 요청이 필요합니다.'},400);}
  const question=String(input?.question??'').trim();
+ const gps=input?.location;
+ const validGps=gps&&Number.isFinite(gps.latitude)&&Number.isFinite(gps.longitude)&&gps.latitude>=34&&gps.latitude<=36.5&&gps.longitude>=128&&gps.longitude<=131;
  if(!question||question.length>300) return json({message:'질문은 1~300자로 입력해 주세요.'},400);
  // MCP inputSchema is JSON Schema; Gemini function declarations accept a smaller subset.
  // Do not send MCP-specific additionalProperties (can cause INVALID_ARGUMENT).
@@ -34,7 +37,7 @@ export async function onRequestPost(context){
      ...(d.inputSchema.required?.length?{required:d.inputSchema.required}:{})
    }
  }));
- const contents=[{role:'user',parts:[{text:question}]}];
+ const contents=[{role:'user',parts:[{text:validGps ? question+' (사용자가 허용한 GPS 위치: latitude='+gps.latitude+', longitude='+gps.longitude+'. 근처 주차장 요청에는 findNearbyParking 도구를 사용하세요.)' : question}]}];
  const request={contents,systemInstruction:{parts:[{text:'당신은 부산 공영주차장 정보 안내자입니다. 주차장 빈자리·주소·요금은 반드시 도구 조회 결과로만 답하세요. 조회 불가 정보는 추측하지 마세요. 빈자리는 제공기관 갱신 당시 수치이며 현장에서 달라질 수 있음을 안내하세요. 한국어로 간결하게 답하세요. 주차장 검색 결과가 있으면 첫 문장은 사용자의 검색 조건에 맞는 한 줄 요약으로 작성하세요. 상세 목록은 UI에서 따로 보여주므로 주차장 다섯 곳을 반복 나열하지 마세요.'}]},tools:[{functionDeclarations:declarations}],generationConfig:{temperature:0.2,maxOutputTokens:800}};
  try{
   let called=[];
@@ -56,6 +59,8 @@ export async function onRequestPost(context){
    const responses=[];
    for(const c of calls.slice(0,3)){
     const t=map.get(c.name);
+    if(c.name==='findNearbyParking' && !validGps) { responses.push({functionResponse:{name:c.name,response:{error:'사용자 위치 권한이 필요합니다.'}}}); continue; }
+    if(c.name==='findNearbyParking') c.args={...c.args,latitude:gps.latitude,longitude:gps.longitude};
     const cacheKey=JSON.stringify([c.name,c.args??{}]);
     let result;
     if(toolCache.has(cacheKey)) result=toolCache.get(cacheKey);
