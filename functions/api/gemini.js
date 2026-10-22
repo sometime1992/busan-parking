@@ -77,7 +77,7 @@ export async function onRequestPost(context){
         const code=String(item?.code??'').trim();
         if(code && !parkingCodes.includes(code) && parkingCodes.length<20){
           parkingCodes.push(code);
-          parkingResults.push({code,name:String(item.name??''),availableSpaces:item.availableSpaces??null});
+          parkingResults.push({code,name:String(item.name??''),availableSpaces:item.availableSpaces??null,distanceMeters:item.distanceMeters??null});
         }
       }
     }
