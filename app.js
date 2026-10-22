@@ -490,7 +490,9 @@ aiForm.addEventListener('submit', async event => {
       if(codes.length && !data) answer.append(element('p','주차장 목록을 아직 불러오지 못했습니다. 인터넷 연결 후 새로고침해 주세요.','ai-meta'));
     }
     answer.append(element('p', result.routeMode==='driving' ? '카카오 자동차 최단거리 경로 기준 · 예상 시간은 교통 상황에 따라 달라지며 실제 주차장 진입로 위치와 차이가 있을 수 있습니다. 빈자리는 도착 시 달라질 수 있습니다.' : 'AI 안내는 제공기관의 조회 자료를 기준으로 하며, 빈자리는 도착 시 달라질 수 있습니다.', 'ai-meta'));
-    if(result.partial && matched.length) answer.append(element('p','일부 후보 주차장의 자동차 경로를 확인할 수 없어 조회 가능한 결과만 표시합니다.','ai-meta'));
+    if(result.routeMode==='driving' && result.notice) answer.append(element('p',result.notice,'ai-meta'));
+    if(result.routeMode==='driving' && result.routeStats?.failed>0) answer.append(element('p',`후보 ${result.routeStats.failed}곳은 자동차 경로 조회에 실패해 순위에서 제외했습니다.`,'ai-meta'));
+    if(result.partial && matched.length && result.routeMode!=='driving') answer.append(element('p','일부 정보만 확인되어 조회 가능한 결과를 표시합니다.','ai-meta'));
     answer.hidden = false;
     status.textContent = '답변 완료' + (result.toolsUsed?.length ? ' · 주차장 데이터 조회 사용' : ' · 주차장 목록 변경 없음');
   } catch (error) {
