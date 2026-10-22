@@ -106,7 +106,7 @@ function render() {
     card.append(top);
     if(aiDriving.has(String(p.parkgcd))) {
       const route=aiDriving.get(String(p.parkgcd));
-      card.append(element('p', `자동차 최단 주행거리 약 ${route.drivingMeters<1000?route.drivingMeters+'m':(route.drivingMeters/1000).toFixed(1)+'km'} · 약 ${Math.max(1,Math.ceil(route.drivingSeconds/60))}분`, 'ai-card-distance'));
+      card.append(element('p', `${route.routeBasis==='address'?'주소 기준 자동차 주행거리':'자동차 최단 주행거리'} 약 ${route.drivingMeters<1000?route.drivingMeters+'m':(route.drivingMeters/1000).toFixed(1)+'km'} · 약 ${Math.max(1,Math.ceil(route.drivingSeconds/60))}분`, 'ai-card-distance'));
     } else if(aiDistances.has(String(p.parkgcd))) {
       const meters=aiDistances.get(String(p.parkgcd));
       card.append(element('p', meters<1000 ? `현재 위치에서 직선거리 약 ${meters}m` : `현재 위치에서 직선거리 약 ${(meters/1000).toFixed(1)}km`, 'ai-card-distance'));
