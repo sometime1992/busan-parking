@@ -167,3 +167,5 @@ select { display:block; width:100%; margin-top:8px; padding:11px; border:1px sol
 .ai-location-toggle{display:flex;align-items:center;gap:9px;font-size:12px!important;font-weight:600;color:#47618b;cursor:pointer}.ai-location-toggle input{width:17px;height:17px;min-height:unset;accent-color:#2458e6}
 
 .ai-card-distance{color:#1d54c6;font-weight:750;font-size:13px;margin:10px 0 4px}
+
+.map-location-note{font-size:11px;color:#6e7f97;line-height:1.5;margin:7px 0 0}
