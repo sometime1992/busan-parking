@@ -99,7 +99,7 @@ async function drivingNearby(context,gps,question){
  return json({
   answer:`자동차 경로가 확인된 ${successful.length}곳과 추가 주차장 후보 ${supplemental.length}곳을 찾았습니다.`,
   parkingCodes:display.map(p=>String(p.parkgcd)),
-  parkingResults:display.map(p=>({code:String(p.parkgcd),name:p.parknm,availableSpaces:p.curravacnt,...(Number.isFinite(p.drivingMeters)?{drivingMeters:p.drivingMeters,drivingSeconds:p.drivingSeconds,verifiedPlace:p.verifiedPlace,routeBasis:p.verifiedPlace?.source==='address_geocoded'?'address':'place'}  :{locationUnverified:true})})),
+  parkingResults:display.map(p=>({code:String(p.parkgcd),name:p.parknm,availableSpaces:p.curravacnt,distanceMeters:p.distanceMeters,...(Number.isFinite(p.drivingMeters)?{drivingMeters:p.drivingMeters,drivingSeconds:p.drivingSeconds,verifiedPlace:p.verifiedPlace,routeBasis:p.verifiedPlace?.source==='address_geocoded'?'address':'place'}  :{locationUnverified:true})})),
   toolsUsed:['findNearbyParking','kakaoDirections'],routeMode:'driving',
   routeStats:{candidates:candidates.length,verified:verifiedCandidates.length,unverified:candidates.length-verifiedCandidates.length,failed,limit:MAX_ROUTE_CANDIDATES},
   notice,partial
