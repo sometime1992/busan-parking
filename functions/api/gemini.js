@@ -63,9 +63,15 @@ async function drivingNearby(context,gps,question){
  });
  if(!candidates.length) return json({answer:'GPS 좌표와 주차장 좌표가 확인되는 주변 주차장을 찾지 못했습니다.',parkingCodes:[],parkingResults:[],toolsUsed:['findNearbyParking'],routeMode:'driving'});
  // Match against Kakao's registered parking places; never route to unverified source coordinates.
- const verified=await Promise.all(candidates.map(async p=>{
-  try{const place=await verifyParkingPlace(p,key);return place?{...p,verifiedPlace:place}:null;}
-  catch{return null;}
+ const verified=new Array(candidates.length).fill(null);
+ let verifyIndex=0;
+ await Promise.all(Array.from({length:Math.min(5,candidates.length)},async()=>{
+  while(verifyIndex<candidates.length){
+   const i=verifyIndex++;
+   const p=candidates[i];
+   try{const place=await verifyParkingPlace(p,key);if(place)verified[i]={...p,verifiedPlace:place};}
+   catch{/* 카카오 장소 미확인: 공공데이터 좌표로 길찾기를 강행하지 않습니다. */}
+  }
  }));
  const verifiedCandidates=verified.filter(Boolean);
  if(!verifiedCandidates.length)return json({answer:'현재 위치 주변 후보의 카카오 등록 주차장 위치를 신뢰할 수준으로 확인하지 못했습니다. 정확하지 않은 자동차 경로는 표시하지 않습니다.',parkingCodes:[],parkingResults:[],toolsUsed:['kakaoLocal'],routeMode:'driving',notice:'카카오 등록 장소와 공공데이터의 주차장명·주소·좌표가 일치하는 경우에만 경로를 표시합니다.'});
