@@ -12,6 +12,7 @@ let aiCodes = null;
 let aiRank = new Map();
 let aiDistances = new Map();
 let aiDriving = new Map();
+let aiVerifiedPlaces = new Map();
 const openDetails = new Set();
 const mobileRefresh = $('mobile-refresh');
 const mobileRefreshLabel = $('mobile-refresh-label');
@@ -135,14 +136,16 @@ function render() {
       && latitude >= 34.5 && latitude <= 36 && longitude >= 128.5 && longitude <= 130;
     const label = String(p.parknm ?? '').trim();
     const link = element('a', validPoint ? '카카오맵에서 주차장 위치 확인 ↗' : '카카오맵에서 주차장명 검색 ↗', 'map-link');
-    link.href = validPoint
-      ? `https://map.kakao.com/link/map/${encodeURIComponent(label)},${latitude},${longitude}`
-      : `https://map.kakao.com/link/search/${encodeURIComponent('부산 '+label)}`;
+    const verifiedPlace=aiVerifiedPlaces.get(String(p.parkgcd));
+    link.href = verifiedPlace?.placeUrl && /^https?:\\/\\/(?:place\\.)?map\\.kakao\\.com\\//.test(verifiedPlace.placeUrl)
+      ? verifiedPlace.placeUrl
+      : `https://map.kakao.com/link/search/${encodeURIComponent('부산 '+label+' 주차장')}`;
+    link.textContent=verifiedPlace?'카카오맵에서 확인된 주차장 보기 ↗':'카카오맵에서 주차장명 검색 ↗';
     link.target = '_blank';
     link.rel = 'noopener noreferrer';
     link.setAttribute('aria-label', `${p.parknm} 카카오맵에서 ${validPoint ? '공공데이터 좌표로 위치 확인' : '이름 검색'} (새 창)`);
     card.append(link);
-    if (validPoint) card.append(element('p','지도 위치는 공공데이터 좌표 기준이며 실제 주차장 입구와 다를 수 있습니다.','map-location-note'));
+    if (!verifiedPlace) card.append(element('p','카카오 등록 장소와 일치 여부가 검증되지 않았습니다. 지도 검색 결과를 직접 확인해 주세요.','map-location-note'));
     const details = element('details', undefined, 'card-details');
     const key = String(p.parkgcd ?? p.parknm);
     details.open = openDetails.has(key);
@@ -431,6 +434,7 @@ function clearAiMode() {
   aiRank = new Map();
   aiDistances = new Map();
   aiDriving = new Map();
+  aiVerifiedPlaces = new Map();
   $('ai-list-mode').hidden = true;
 }
 function activateAiResults(codes) {
@@ -489,6 +493,7 @@ aiForm.addEventListener('submit', async event => {
       activateAiResults(matched);
       aiDistances=new Map((result.parkingResults??[]).filter(p=>Number.isFinite(p.distanceMeters)).map(p=>[String(p.code),p.distanceMeters]));
       aiDriving=new Map((result.parkingResults??[]).filter(p=>Number.isFinite(p.drivingMeters)&&Number.isFinite(p.drivingSeconds)).map(p=>[String(p.code),p]));
+      aiVerifiedPlaces=new Map((result.parkingResults??[]).filter(p=>p.verifiedPlace).map(p=>[String(p.code),p.verifiedPlace]));
       render();
       const button = element('button', `검색 결과 ${matched.length}곳 보기 ↓`, 'ai-results-button');
       button.type='button';
@@ -501,6 +506,7 @@ aiForm.addEventListener('submit', async event => {
     }
     answer.append(element('p', result.routeMode==='driving' ? '카카오 자동차 최단거리 경로 기준 · 예상 시간은 교통 상황에 따라 달라지며 실제 주차장 진입로 위치와 차이가 있을 수 있습니다. 빈자리는 도착 시 달라질 수 있습니다.' : 'AI 안내는 제공기관의 조회 자료를 기준으로 하며, 빈자리는 도착 시 달라질 수 있습니다.', 'ai-meta'));
     if(result.routeMode==='driving' && result.notice) answer.append(element('p',result.notice,'ai-meta'));
+    if(result.routeMode==='driving' && result.routeStats?.unverified>0) answer.append(element('p',`주차장 ${result.routeStats.unverified}곳은 위치 일치 여부를 확인할 수 없어 자동차 경로 계산에서 제외했습니다.`,'ai-meta'));
     if(result.routeMode==='driving' && result.routeStats?.failed>0) answer.append(element('p',`후보 ${result.routeStats.failed}곳은 자동차 경로 조회에 실패해 순위에서 제외했습니다.`,'ai-meta'));
     if(result.partial && matched.length && result.routeMode!=='driving') answer.append(element('p','일부 정보만 확인되어 조회 가능한 결과를 표시합니다.','ai-meta'));
     answer.hidden = false;
