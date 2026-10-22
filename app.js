@@ -104,12 +104,30 @@ function render() {
     top.append(element('span', 'P', 'parking-symbol'));
     top.append(element('h3', value(p.parknm)), element('span', unknown ? '확인 불가' : p.curravacnt === 0 ? '만차' : '주차 가능', `badge ${state}`));
     card.append(top);
-    if(aiDriving.has(String(p.parkgcd))) {
-      const route=aiDriving.get(String(p.parkgcd));
-      card.append(element('p', `${route.routeBasis==='address'?'주소 기준 자동차 주행거리':'자동차 최단 주행거리'} 약 ${route.drivingMeters<1000?route.drivingMeters+'m':(route.drivingMeters/1000).toFixed(1)+'km'} · 약 ${Math.max(1,Math.ceil(route.drivingSeconds/60))}분`, 'ai-card-distance'));
-    } else if(aiDistances.has(String(p.parkgcd))) {
-      const meters=aiDistances.get(String(p.parkgcd));
-      card.append(element('p', meters<1000 ? `현재 위치에서 직선거리 약 ${meters}m` : `현재 위치에서 직선거리 약 ${(meters/1000).toFixed(1)}km`, 'ai-card-distance'));
+    if(aiCodes?.has(String(p.parkgcd))) {
+      const driving=aiDriving.get(String(p.parkgcd));
+      const straight=aiDistances.get(String(p.parkgcd));
+      const distanceBox=element('div',undefined,'ai-distance-grid');
+      const car=element('div',undefined,'ai-distance-cell');
+      car.append(element('span','자동차 주행거리','ai-distance-label'));
+      if(driving) {
+        car.append(element('strong',driving.drivingMeters<1000?`${driving.drivingMeters}m`:`${(driving.drivingMeters/1000).toFixed(1)}km`));
+        car.append(element('small',`예상 약 ${Math.max(1,Math.ceil(driving.drivingSeconds/60))}분${driving.routeBasis==='address'?' · 주소 기준':''}`));
+      } else {
+        car.append(element('strong','확인 불가'));
+        car.append(element('small','자동차 경로 미확인'));
+      }
+      const line=element('div',undefined,'ai-distance-cell');
+      line.append(element('span','직선거리','ai-distance-label'));
+      if(Number.isFinite(straight)){
+        line.append(element('strong',straight<1000?`${straight}m`:`${(straight/1000).toFixed(1)}km`));
+        line.append(element('small','공공데이터 좌표 기준'));
+      } else {
+        line.append(element('strong','확인 불가'));
+        line.append(element('small','GPS·좌표 확인 필요'));
+      }
+      distanceBox.append(car,line);
+      card.append(distanceBox);
     }
     const address = element('p', value(p.doroAddr ?? p.jibunAddr), 'address-preview');
     address.append(element('small', '주소 · 공공데이터 기준'));
@@ -446,6 +464,45 @@ function activateAiResults(codes) {
   render();
 }
 $('ai-reset-list').addEventListener('click', () => { resetFilters(); $('results-title').scrollIntoView({behavior:'smooth',block:'start'}); });
+
+// SpeechRecognition is browser-dependent. Transcription fills the existing AI input; it does not send a query automatically.
+const voiceButton=$('ai-voice');
+const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
+let recognizer=null;
+if(!SpeechRecognition){
+  voiceButton.disabled=true;
+  voiceButton.title='이 브라우저에서는 음성인식을 지원하지 않습니다.';
+  voiceButton.setAttribute('aria-label','음성인식 미지원 브라우저');
+} else {
+  recognizer=new SpeechRecognition();
+  recognizer.lang='ko-KR';
+  recognizer.interimResults=false;
+  recognizer.maxAlternatives=1;
+  recognizer.continuous=false;
+  recognizer.addEventListener('start',()=>{
+    voiceButton.setAttribute('aria-pressed','true');
+    $('ai-status').textContent='듣고 있습니다. 주차장 질문을 말씀해 주세요.';
+  });
+  recognizer.addEventListener('result',event=>{
+    const transcript=Array.from(event.results).map(result=>result[0]?.transcript??'').join(' ').trim();
+    if(transcript){
+      $('ai-question').value=transcript.slice(0,300);
+      $('ai-status').textContent='음성 입력 완료 · 내용을 확인한 뒤 AI 검색을 눌러주세요.';
+      $('ai-question').focus();
+    }
+  });
+  recognizer.addEventListener('error',event=>{
+    const messages={not\u002dallowed:'마이크 권한이 거부되었습니다. 브라우저 권한을 확인해 주세요.',no\u002dspeech:'음성을 인식하지 못했습니다. 다시 시도해 주세요.',network:'음성인식 연결에 실패했습니다. 키보드 검색은 계속 사용할 수 있습니다.',audio\u002dcapture:'마이크를 사용할 수 없습니다.'};
+    $('ai-status').textContent=messages[event.error]||'음성인식을 완료하지 못했습니다. 다시 시도해 주세요.';
+  });
+  recognizer.addEventListener('end',()=>voiceButton.setAttribute('aria-pressed','false'));
+  voiceButton.addEventListener('click',()=>{
+    try{
+      if(voiceButton.getAttribute('aria-pressed')==='true') recognizer.stop();
+      else recognizer.start();
+    }catch{ $('ai-status').textContent='음성인식을 다시 시작해 주세요.'; }
+  });
+}
 
 // 개인 과제용 AI 검색: 브라우저는 Gemini API 키를 전달받지 않습니다.
 const aiForm = $('ai-form');
