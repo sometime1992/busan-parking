@@ -70,7 +70,7 @@ async function drivingNearby(context,gps,question){
   while(verifyIndex<candidates.length){
    const i=verifyIndex++;
    const p=candidates[i];
-   try{const place=mappedParkingPlace(p)??await verifyParkingPlace(p,key);if(place)verified[i]={...p,verifiedPlace:place};}
+   try{const place=mappedParkingPlace(p)??await verifyParkingPlace(p,key,context);if(place)verified[i]={...p,verifiedPlace:place};}
    catch{/* 카카오 장소 미확인: 공공데이터 좌표로 길찾기를 강행하지 않습니다. */}
   }
  }));
