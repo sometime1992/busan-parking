@@ -4,6 +4,8 @@ import * as search from '../../mcp/tools/searchParking.js';
 import * as free from '../../mcp/tools/findAvailableParking.js';
 import * as detail from '../../mcp/tools/getParkingDetail.js';
 import * as nearby from '../../mcp/tools/findNearbyParking.js';
+import {getParking} from '../../mcp/tools/data.js';
+import {nearby as nearest,point} from '../../lib/nearbyParking.js';
 const tools=[search,free,detail,nearby];
 const map=new Map(tools.map(t=>[t.definition.name,t]));
 const json=(body,status=200)=>new Response(JSON.stringify(body),{status,headers:{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
@@ -13,6 +15,37 @@ async function generate(key,body){
  if(!response.ok) throw new Error('Gemini API 오류 ('+response.status+'). 프로젝트 모델 접근 권한, 사용량 또는 결제를 확인하세요.');
  return response.json();
 }
+
+const drivingRequest=async(key,origin,destination)=>{
+ const url=new URL('https://apis-navi.kakaomobility.com/v1/directions');
+ url.searchParams.set('origin',origin.longitude+','+origin.latitude);
+ url.searchParams.set('destination',destination.lng+','+destination.lat);
+ url.searchParams.set('priority','DISTANCE');
+ url.searchParams.set('summary','true');
+ const response=await fetch(url,{headers:{Authorization:'KakaoAK '+key},signal:AbortSignal.timeout(9000)});
+ if(!response.ok) throw new Error('자동차 길찾기 API 오류 ('+response.status+')');
+ const body=await response.json();
+ const route=body.routes?.[0];
+ if(route?.result_code!==0 || !Number.isFinite(route?.summary?.distance) || !Number.isFinite(route?.summary?.duration)) throw new Error('자동차 경로를 찾지 못했습니다.');
+ return {drivingMeters:Math.round(route.summary.distance),drivingSeconds:Math.round(route.summary.duration)};
+};
+async function drivingNearby(context,gps,question){
+ const key=String(context.env.KAKAO_REST_API_KEY??'').trim();
+ if(!key) return json({message:'KAKAO_REST_API_KEY 등록 후 다시 배포해 주세요.'},503);
+ const n=Number(/(\\d+)\\s*곳/.exec(question)?.[1]??5);
+ const limit=Math.min(10,Math.max(1,n));
+ const list=await getParking(context);
+ const candidates=nearest(list.parkingList,gps.latitude,gps.longitude,{limit:12,radius:15000,onlyAvailable:!(/빈자리 상관없이|만차도|전체 주차장/.test(question))});
+ if(!candidates.length) return json({answer:'GPS 좌표와 주차장 좌표가 확인되는 주변 주차장을 찾지 못했습니다.',parkingCodes:[],parkingResults:[],toolsUsed:['findNearbyParking'],routeMode:'driving'});
+ const settled=await Promise.allSettled(candidates.map(async p=>{
+  const geo=point(p);
+  return {...p,...await drivingRequest(key,gps,geo)};
+ }));
+ const successful=settled.filter(r=>r.status==='fulfilled').map(r=>r.value).sort((a,b)=>a.drivingMeters-b.drivingMeters).slice(0,limit);
+ if(!successful.length) return json({message:'카카오 자동차 경로를 조회하지 못했습니다. API 권한 또는 주차장 좌표를 확인해 주세요.'},502);
+ return json({answer:'현재 위치에서 자동차 주행거리가 짧은 순으로 '+successful.length+'곳을 찾았습니다.',parkingCodes:successful.map(p=>String(p.parkgcd)),parkingResults:successful.map(p=>({code:String(p.parkgcd),name:p.parknm,availableSpaces:p.curravacnt,drivingMeters:p.drivingMeters,drivingSeconds:p.drivingSeconds})),toolsUsed:['findNearbyParking','kakaoDirections'],routeMode:'driving',partial:successful.length<limit});
+}
+
 export async function onRequestPost(context){
  const key=String(context.env.GEMINI_API_KEY??'').trim();
  if(!key) return json({message:'GEMINI_API_KEY 비밀 변수가 설정되지 않았습니다.'},503);
@@ -24,6 +57,10 @@ export async function onRequestPost(context){
  const gps=input?.location;
  const validGps=gps&&Number.isFinite(gps.latitude)&&Number.isFinite(gps.longitude)&&gps.latitude>=34&&gps.latitude<=36.5&&gps.longitude>=128&&gps.longitude<=131;
  if(!question||question.length>300) return json({message:'질문은 1~300자로 입력해 주세요.'},400);
+ if(validGps && /내 위치|현재 위치|내 주변|가까운|근처|주변 주차장/.test(question)) {
+   try { return await drivingNearby(context,gps,question); }
+   catch(error) { return json({message:error instanceof Error?error.message:'자동차 길찾기 오류'},502); }
+ }
  // MCP inputSchema is JSON Schema; Gemini function declarations accept a smaller subset.
  // Do not send MCP-specific additionalProperties (can cause INVALID_ARGUMENT).
  const declarations=tools.map(({definition:d})=>({
