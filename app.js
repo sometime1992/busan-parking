@@ -11,6 +11,7 @@ let activeFilter = 'all';
 let aiCodes = null;
 let aiRank = new Map();
 let aiDistances = new Map();
+let aiDriving = new Map();
 const openDetails = new Set();
 const mobileRefresh = $('mobile-refresh');
 const mobileRefreshLabel = $('mobile-refresh-label');
@@ -102,7 +103,10 @@ function render() {
     top.append(element('span', 'P', 'parking-symbol'));
     top.append(element('h3', value(p.parknm)), element('span', unknown ? '확인 불가' : p.curravacnt === 0 ? '만차' : '주차 가능', `badge ${state}`));
     card.append(top);
-    if(aiDistances.has(String(p.parkgcd))) {
+    if(aiDriving.has(String(p.parkgcd))) {
+      const route=aiDriving.get(String(p.parkgcd));
+      card.append(element('p', `자동차 최단 주행거리 약 ${route.drivingMeters<1000?route.drivingMeters+'m':(route.drivingMeters/1000).toFixed(1)+'km'} · 약 ${Math.max(1,Math.ceil(route.drivingSeconds/60))}분`, 'ai-card-distance'));
+    } else if(aiDistances.has(String(p.parkgcd))) {
       const meters=aiDistances.get(String(p.parkgcd));
       card.append(element('p', meters<1000 ? `현재 위치에서 직선거리 약 ${meters}m` : `현재 위치에서 직선거리 약 ${(meters/1000).toFixed(1)}km`, 'ai-card-distance'));
     }
@@ -416,6 +420,7 @@ function clearAiMode() {
   aiCodes = null;
   aiRank = new Map();
   aiDistances = new Map();
+  aiDriving = new Map();
   $('ai-list-mode').hidden = true;
 }
 function activateAiResults(codes) {
@@ -473,6 +478,7 @@ aiForm.addEventListener('submit', async event => {
     if(matched.length) {
       activateAiResults(matched);
       aiDistances=new Map((result.parkingResults??[]).filter(p=>Number.isFinite(p.distanceMeters)).map(p=>[String(p.code),p.distanceMeters]));
+      aiDriving=new Map((result.parkingResults??[]).filter(p=>Number.isFinite(p.drivingMeters)&&Number.isFinite(p.drivingSeconds)).map(p=>[String(p.code),p]));
       render();
       const button = element('button', `검색 결과 ${matched.length}곳 보기 ↓`, 'ai-results-button');
       button.type='button';
@@ -483,7 +489,8 @@ aiForm.addEventListener('submit', async event => {
       render();
       if(codes.length && !data) answer.append(element('p','주차장 목록을 아직 불러오지 못했습니다. 인터넷 연결 후 새로고침해 주세요.','ai-meta'));
     }
-    answer.append(element('p', 'AI 안내는 제공기관의 조회 자료를 기준으로 하며, 빈자리는 도착 시 달라질 수 있습니다.', 'ai-meta'));
+    answer.append(element('p', result.routeMode==='driving' ? '카카오 자동차 최단거리 경로 기준 · 예상 시간은 교통 상황에 따라 달라지며 실제 주차장 진입로 위치와 차이가 있을 수 있습니다. 빈자리는 도착 시 달라질 수 있습니다.' : 'AI 안내는 제공기관의 조회 자료를 기준으로 하며, 빈자리는 도착 시 달라질 수 있습니다.', 'ai-meta'));
+    if(result.partial && matched.length) answer.append(element('p','일부 후보 주차장의 자동차 경로를 확인할 수 없어 조회 가능한 결과만 표시합니다.','ai-meta'));
     answer.hidden = false;
     status.textContent = '답변 완료' + (result.toolsUsed?.length ? ' · 주차장 데이터 조회 사용' : ' · 주차장 목록 변경 없음');
   } catch (error) {
