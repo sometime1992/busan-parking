@@ -75,6 +75,18 @@ function date(text) {
   // 제공기관의 시각은 변환하지 않고 그대로 표시합니다.
   return value(text);
 }
+function routeErrorMessage(stats){
+ if(!stats||typeof stats!=='object')return '';
+ const total=key=>Object.entries(stats).filter(([k])=>k.endsWith(key)).reduce((sum,[,v])=>sum+(Number(v)||0),0);
+ if(total('Http401')||total('Http403'))
+   return '카카오 API 인증 또는 사용 권한 오류(401/403)가 감지되었습니다. 카카오 개발자 설정과 Cloudflare의 KAKAO_REST_API_KEY를 확인해 주세요.';
+ if(total('Http429'))return '카카오 API 요청 제한(429)이 감지되었습니다. 요청량·쿼터를 확인해 주세요.';
+ const routeCodes=Object.keys(stats).filter(k=>k.startsWith('directionsResult')&&stats[k]>0);
+ if(routeCodes.length)return '카카오 자동차 길찾기에서 경로를 찾지 못한 요청이 있습니다('+routeCodes.join(', ')+'). 목적지 좌표를 확인해 주세요.';
+ if(stats.routeTimeout||stats.localTimeout||stats.geocodeTimeout)return '외부 지도 API 응답 시간이 초과되었습니다. 네트워크 상태 또는 API 호출 지연을 확인해 주세요.';
+ if(stats.localUnmatched||stats.geocodeNoUnique||stats.geocodeFarFromSource)return '일부 공영주차장의 카카오 등록 장소나 주소 좌표를 확인하지 못했습니다. 실제 출입구 좌표가 필요할 수 있습니다.';
+ return '';
+}
 function render() {
   $('clear-search').hidden = !$('search').value;
   if (!data) return;
@@ -356,6 +368,8 @@ $('search-form').addEventListener('submit',async event=>{
    ordinaryDriving=new Map(results.filter(p=>ordinaryDistanceCodes.has(String(p.code))&&Number.isFinite(p.drivingMeters)&&Number.isFinite(p.drivingSeconds)).map(p=>[String(p.code),p]));
    ordinaryVerifiedPlaces=new Map(results.filter(p=>ordinaryDistanceCodes.has(String(p.code))&&p.verifiedPlace).map(p=>[String(p.code),p.verifiedPlace]));
    status.textContent='자동차 주행거리 '+ordinaryDriving.size+'곳 · 직선거리 '+ordinaryDistances.size+'곳 표시 중';
+   const failure=routeErrorMessage(result.routeDiagnostics);
+   if(failure)status.textContent+=' · '+failure;
    render();
  }catch(error){
    if(id!==ordinaryDistanceRequest)return;
@@ -667,6 +681,8 @@ aiForm.addEventListener('submit', async event => {
     }
     answer.append(element('p', result.routeMode==='driving' ? '카카오 자동차 최단거리 경로 기준 · 예상 시간은 교통 상황에 따라 달라지며 실제 주차장 진입로 위치와 차이가 있을 수 있습니다. 빈자리는 도착 시 달라질 수 있습니다.' : 'AI 안내는 제공기관의 조회 자료를 기준으로 하며, 빈자리는 도착 시 달라질 수 있습니다.', 'ai-meta'));
     if(result.notice) answer.append(element('p',result.notice,'ai-meta'));
+    const routeFailure=routeErrorMessage(result.routeDiagnostics);
+    if(routeFailure)answer.append(element('p',routeFailure,'ai-meta'));
     if(result.routeMode==='driving' && result.routeStats?.unverified>0) answer.append(element('p',`주차장 ${result.routeStats.unverified}곳은 위치 일치 여부를 확인할 수 없어 자동차 경로 계산에서 제외했습니다.`,'ai-meta'));
     if(result.routeMode==='driving' && result.routeStats?.failed>0) answer.append(element('p',`후보 ${result.routeStats.failed}곳은 자동차 경로 조회에 실패해 순위에서 제외했습니다.`,'ai-meta'));
     if(result.partial && matched.length && result.routeMode!=='driving' && result.routeMode!=='unverified') answer.append(element('p','일부 정보만 확인되어 조회 가능한 결과를 표시합니다.','ai-meta'));
