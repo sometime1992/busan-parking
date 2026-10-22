@@ -26,28 +26,29 @@ const drivingRequest=async(key,origin,destination)=>{
  url.searchParams.set('priority','DISTANCE');
  url.searchParams.set('summary','true');
  const response=await fetch(url,{headers:{Authorization:'KakaoAK '+key},signal:AbortSignal.timeout(9000)});
- if(!response.ok) throw new Error('자동차 길찾기 API 오류 ('+response.status+')');
+ if(!response.ok) throw new Error('directionsHttp'+response.status);
  const body=await response.json();
  const route=body.routes?.[0];
- if(route?.result_code!==0 || !Number.isFinite(route?.summary?.distance) || !Number.isFinite(route?.summary?.duration)) throw new Error('자동차 경로를 찾지 못했습니다.');
+ if(route?.result_code!==0 || !Number.isFinite(route?.summary?.distance) || !Number.isFinite(route?.summary?.duration)) throw new Error('directionsResult'+String(route?.result_code??'unknown'));
  return {drivingMeters:Math.round(route.summary.distance),drivingSeconds:Math.round(route.summary.duration)};
 };
 // 자동차 경로 요청은 1회 검색당 최대 20건, 동시 최대 5건으로 제한합니다.
-const MAX_ROUTE_CANDIDATES=20;
+const MAX_ROUTE_CANDIDATES=10;
 const ROUTE_CONCURRENCY=5;
 function requestedCount(question){
  const match=/(\d+)\s*(?:곳|개|군데)/.exec(question);
  return match?Math.min(10,Math.max(1,Number(match[1]))):5;
 }
-async function boundedRoutes(candidates,key,gps){
+async function boundedRoutes(candidates,key,gps,stats){
  const results=new Array(candidates.length);
  let next=0;
  async function worker(){
   while(next<candidates.length){
    const i=next++;
    const p=candidates[i];
-   try {results[i]={status:'fulfilled',value:{...p,...await drivingRequest(key,gps,p.verifiedPlace??point(p))}};}
-   catch(error){results[i]={status:'rejected',reason:error};}
+   if(stats)stats.routeRequests=(stats.routeRequests??0)+1;
+   try {results[i]={status:'fulfilled',value:{...p,...await drivingRequest(key,gps,p.verifiedPlace??point(p))}};if(stats)stats.routeSuccess=(stats.routeSuccess??0)+1;}
+   catch(error){results[i]={status:'rejected',reason:error};if(stats){const label=String(error?.message??'').match(/directionsHttp\d+|directionsResult[-\d]+/)?.[0]??(error?.name==='TimeoutError'?'routeTimeout':'routeOther');stats[label]=(stats[label]??0)+1;}}
   }
  }
  await Promise.all(Array.from({length:Math.min(ROUTE_CONCURRENCY,candidates.length)},worker));
@@ -57,6 +58,7 @@ export async function drivingNearby(context,gps,question,selectedCodes=null){
  const key=String(context.env.KAKAO_REST_API_KEY??'').trim();
  if(!key) return json({message:'KAKAO_REST_API_KEY 등록 후 다시 배포해 주세요.'},503);
  const limit=requestedCount(question);
+ const stats={};
  const list=await getParking(context);
  // 후보는 직선거리로만 1차 선별합니다. 최종 순위는 반드시 실제 자동차 경로로 계산합니다.
  const source=Array.isArray(selectedCodes)?list.parkingList.filter(p=>selectedCodes.includes(String(p.parkgcd))):list.parkingList;
@@ -72,7 +74,7 @@ export async function drivingNearby(context,gps,question,selectedCodes=null){
   while(verifyIndex<candidates.length){
    const i=verifyIndex++;
    const p=candidates[i];
-   try{const place=mappedParkingPlace(p)??await verifyParkingPlace(p,key,context)??await geocodeParkingAddress(p,key);if(place)verified[i]={...p,verifiedPlace:place};}
+   try{const place=mappedParkingPlace(p)??await verifyParkingPlace(p,key,context,stats)??await geocodeParkingAddress(p,key,stats);if(place)verified[i]={...p,verifiedPlace:place};}
    catch{/* 카카오 장소 미확인: 공공데이터 좌표로 길찾기를 강행하지 않습니다. */}
   }
  }));
@@ -83,9 +85,9 @@ export async function drivingNearby(context,gps,question,selectedCodes=null){
   parkingResults:candidates.slice(0,limit).map(p=>({code:String(p.parkgcd),name:p.parknm,availableSpaces:p.curravacnt,distanceMeters:p.distanceMeters,locationUnverified:true})),
   toolsUsed:['findNearbyParking','kakaoLocal'],routeMode:'unverified',
   notice:'자동차 주행거리는 목적지를 확인하지 못해 표시하지 않습니다. 직선거리는 공공데이터 대표 좌표를 기준으로 계산하므로 실제 주차장 입구와 다를 수 있습니다.',
-  partial:true
+  partial:true,routeDiagnostics:stats
  });
- const settled=await boundedRoutes(verifiedCandidates,key,gps);
+ const settled=await boundedRoutes(verifiedCandidates,key,gps,stats);
  const successful=settled.filter(r=>r.status==='fulfilled').map(r=>r.value)
    .sort((a,b)=>a.drivingMeters-b.drivingMeters || String(a.parkgcd).localeCompare(String(b.parkgcd)))
    .slice(0,limit);
@@ -103,7 +105,7 @@ export async function drivingNearby(context,gps,question,selectedCodes=null){
   parkingResults:display.map(p=>({code:String(p.parkgcd),name:p.parknm,availableSpaces:p.curravacnt,distanceMeters:p.distanceMeters,...(Number.isFinite(p.drivingMeters)?{drivingMeters:p.drivingMeters,drivingSeconds:p.drivingSeconds,verifiedPlace:p.verifiedPlace,routeBasis:p.verifiedPlace?.source==='address_geocoded'?'address':'place'}  :{locationUnverified:true})})),
   toolsUsed:['findNearbyParking','kakaoDirections'],routeMode:'driving',
   routeStats:{candidates:candidates.length,verified:verifiedCandidates.length,unverified:candidates.length-verifiedCandidates.length,failed,limit:MAX_ROUTE_CANDIDATES},
-  notice,partial
+  notice,partial,routeDiagnostics:stats
  });
 }
 
