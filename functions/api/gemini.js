@@ -74,7 +74,14 @@ async function drivingNearby(context,gps,question){
   }
  }));
  const verifiedCandidates=verified.filter(Boolean);
- if(!verifiedCandidates.length)return json({answer:'현재 위치 주변 후보의 카카오 등록 주차장 위치를 신뢰할 수준으로 확인하지 못했습니다. 정확하지 않은 자동차 경로는 표시하지 않습니다.',parkingCodes:[],parkingResults:[],toolsUsed:['kakaoLocal'],routeMode:'driving',notice:'카카오 등록 장소와 공공데이터의 주차장명·주소·좌표가 일치하는 경우에만 경로를 표시합니다.'});
+ if(!verifiedCandidates.length)return json({
+  answer:'주차장 위치를 충분히 검증하지 못해 자동차 주행거리는 제공하지 않습니다. 대신 공공데이터 기준으로 가까운 후보를 표시합니다.',
+  parkingCodes:candidates.slice(0,limit).map(p=>String(p.parkgcd)),
+  parkingResults:candidates.slice(0,limit).map(p=>({code:String(p.parkgcd),name:p.parknm,availableSpaces:p.curravacnt,distanceMeters:p.distanceMeters})),
+  toolsUsed:['findNearbyParking','kakaoLocal'],routeMode:'unverified',
+  notice:'아래 후보는 공공데이터 좌표의 직선거리 순서이며 자동차 최단거리 순위가 아닙니다. 위치와 주차장명을 반드시 확인하세요.',
+  partial:true
+ });
  const settled=await boundedRoutes(verifiedCandidates,key,gps);
  const successful=settled.filter(r=>r.status==='fulfilled').map(r=>r.value)
    .sort((a,b)=>a.drivingMeters-b.drivingMeters || String(a.parkgcd).localeCompare(String(b.parkgcd)))
