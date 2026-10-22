@@ -14,6 +14,7 @@ let aiDistances = new Map();
 let aiDriving = new Map();
 let aiVerifiedPlaces = new Map();
 let ordinaryDistanceMode = false;
+let ordinaryDistanceCodes = new Set();
 let ordinaryDistanceRequest = 0;
 const openDetails = new Set();
 const mobileRefresh = $('mobile-refresh');
@@ -24,6 +25,7 @@ function resetStats() {
   $('result-count').textContent = '';
 }
 function resetFilters() {
+  clearOrdinaryDistances();
   clearAiMode();
   $('search').value = '';
   activeFilter = 'all';
@@ -106,7 +108,7 @@ function render() {
     top.append(element('span', 'P', 'parking-symbol'));
     top.append(element('h3', value(p.parknm)), element('span', unknown ? '확인 불가' : p.curravacnt === 0 ? '만차' : '주차 가능', `badge ${state}`));
     card.append(top);
-    if(aiCodes?.has(String(p.parkgcd)) || ordinaryDistanceMode) {
+    if(aiCodes?.has(String(p.parkgcd)) || (ordinaryDistanceMode && ordinaryDistanceCodes.has(String(p.parkgcd)))) {
       const driving=aiDriving.get(String(p.parkgcd));
       const straight=aiDistances.get(String(p.parkgcd));
       const distanceBox=element('div',undefined,'ai-distance-grid');
@@ -278,6 +280,7 @@ async function loadParkingList() {
 function clearOrdinaryDistances(){
  ordinaryDistanceRequest++;
  ordinaryDistanceMode=false;
+ ordinaryDistanceCodes=new Set();
  if(!aiCodes){
    aiDistances=new Map();
    aiDriving=new Map();
@@ -285,47 +288,79 @@ function clearOrdinaryDistances(){
  }
  $('search-distance-status').textContent='';
 }
+function publicDataPoint(p){
+ if(p.xCdnt===null||p.xCdnt===undefined||p.yCdnt===null||p.yCdnt===undefined)return null;
+ const x=Number(p.xCdnt),y=Number(p.yCdnt);
+ if(x>=128.5&&x<=130&&y>=34.5&&y<=36)return {lat:y,lng:x};
+ if(y>=128.5&&y<=130&&x>=34.5&&x<=36)return {lat:x,lng:y};
+ return null;
+}
+function straightMeters(a,b){
+ const r=Math.PI/180,dLat=(b.lat-a.lat)*r,dLng=(b.lng-a.lng)*r;
+ const q=Math.sin(dLat/2)**2+Math.cos(a.lat*r)*Math.cos(b.lat*r)*Math.sin(dLng/2)**2;
+ return Math.round(6371000*2*Math.atan2(Math.sqrt(q),Math.sqrt(1-q)));
+}
 $('search-form').addEventListener('submit',async event=>{
  event.preventDefault();
- const enabled=$('search-use-location').checked;
+ const enabled=$('ai-use-location').checked;
  clearOrdinaryDistances();
+ if(aiCodes)clearAiMode();
  render();
  if(!enabled)return;
- const id=ordinaryDistanceRequest;
- const status=$('search-distance-status');
+ const id=ordinaryDistanceRequest,status=$('search-distance-status');
  if(!data?.parkingList?.length){status.textContent='주차장 목록을 불러온 후 다시 검색해 주세요.';return;}
  const query=normalize($('search').value);
  const selected=data.parkingList.filter(p=>{
    const match=normalize(p.parknm).includes(query)||normalize(p.pkNam).includes(query);
    const state=!known(p)?'unknown':p.curravacnt===0?'full':'available';
    return match&&(activeFilter==='all'||activeFilter===state);
- }).slice(0,10);
- if(!selected.length){status.textContent='검색 조건에 맞는 주차장이 없습니다.';return;}
+ });
+ selected.sort((a,b)=>$('sort').value==='available'
+   ?((known(b)?b.curravacnt:-1)-(known(a)?a.curravacnt:-1)||String(a.parknm).localeCompare(String(b.parknm),'ko'))
+   :String(a.parknm).localeCompare(String(b.parknm),'ko'));
+ const requested=selected.slice(0,10);
+ if(!requested.length){status.textContent='검색 조건에 맞는 주차장이 없습니다.';return;}
  try{
-   status.textContent='GPS 위치를 확인하고 있습니다.';
+   status.textContent='현재 GPS 위치를 확인하고 있습니다.';
    if(!navigator.geolocation)throw Error('이 브라우저는 위치 기능을 지원하지 않습니다.');
-   const pos=await new Promise((resolve,reject)=>navigator.geolocation.getCurrentPosition(resolve,reject,{enableHighAccuracy:true,timeout:12000,maximumAge:0}));
+   const pos=await new Promise((resolve,reject)=>navigator.geolocation.getCurrentPosition(resolve,reject,{enableHighAccuracy:true,timeout:15000,maximumAge:30000}));
    if(id!==ordinaryDistanceRequest)return;
-   status.textContent='자동차 주행거리와 직선거리를 조회하고 있습니다.';
-   const response=await fetch('/api/distances',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
-     location:{latitude:pos.coords.latitude,longitude:pos.coords.longitude},
-     parkingCodes:selected.map(p=>String(p.parkgcd))
-   }),cache:'no-store',signal:AbortSignal.timeout(45000)});
-   const result=await response.json();
-   if(id!==ordinaryDistanceRequest)return;
-   if(!response.ok)throw Error(result.message||'거리 조회에 실패했습니다.');
-   const results=Array.isArray(result.parkingResults)?result.parkingResults:[];
-   aiDistances=new Map(results.filter(p=>Number.isFinite(p.distanceMeters)).map(p=>[String(p.code),p.distanceMeters]));
-   aiDriving=new Map(results.filter(p=>Number.isFinite(p.drivingMeters)&&Number.isFinite(p.drivingSeconds)).map(p=>[String(p.code),p]));
-   aiVerifiedPlaces=new Map(results.filter(p=>p.verifiedPlace).map(p=>[String(p.code),p.verifiedPlace]));
+   const location={latitude:pos.coords.latitude,longitude:pos.coords.longitude};
+   if(!Number.isFinite(location.latitude)||!Number.isFinite(location.longitude))throw Error('위치 좌표를 확인하지 못했습니다.');
+   ordinaryDistanceCodes=new Set(requested.map(p=>String(p.parkgcd)));
+   aiDistances=new Map(requested.flatMap(p=>{
+     const coords=publicDataPoint(p);
+     return coords?[[String(p.parkgcd),straightMeters({lat:location.latitude,lng:location.longitude},coords)]]:[];
+   }));
    ordinaryDistanceMode=true;
-   status.textContent=`선택한 주차장 최대 10곳 중 자동차 주행거리 ${aiDriving.size}곳 확인 · 직선거리 ${aiDistances.size}곳 확인`;
+   render();
+   status.textContent='직선거리 '+aiDistances.size+'곳 확인 · 자동차 주행거리를 조회하고 있습니다.';
+   let result;
+   try{
+     const response=await fetch('/api/distances',{
+       method:'POST',headers:{'Content-Type':'application/json'},
+       body:JSON.stringify({location,parkingCodes:requested.map(p=>String(p.parkgcd))}),
+       cache:'no-store',signal:AbortSignal.timeout(55000)
+     });
+     result=await response.json();
+     if(!response.ok)throw Error(result.message||'자동차 경로 조회에 실패했습니다.');
+   }catch(error){
+     if(id!==ordinaryDistanceRequest)return;
+     status.textContent='직선거리 '+aiDistances.size+'곳 표시 중 · 자동차 경로 '+(error.name==='TimeoutError'?'시간 초과':error.message);
+     return;
+   }
+   if(id!==ordinaryDistanceRequest)return;
+   const results=Array.isArray(result.parkingResults)?result.parkingResults:[];
+   aiDriving=new Map(results.filter(p=>ordinaryDistanceCodes.has(String(p.code))&&Number.isFinite(p.drivingMeters)&&Number.isFinite(p.drivingSeconds)).map(p=>[String(p.code),p]));
+   aiVerifiedPlaces=new Map(results.filter(p=>ordinaryDistanceCodes.has(String(p.code))&&p.verifiedPlace).map(p=>[String(p.code),p.verifiedPlace]));
+   status.textContent='자동차 주행거리 '+aiDriving.size+'곳 · 직선거리 '+aiDistances.size+'곳 표시 중';
    render();
  }catch(error){
    if(id!==ordinaryDistanceRequest)return;
-   status.textContent=error.code===1?'위치 권한이 거부되었습니다.':error.name==='TimeoutError'||error.code===3?'위치 또는 경로 조회 시간이 초과되었습니다.':error.message;
+   status.textContent=error.code===1?'위치 권한이 거부되었습니다. 브라우저 위치 접근을 허용해 주세요.':error.name==='TimeoutError'||error.code===3?'GPS 위치 조회 시간이 초과되었습니다.':error.message;
  }
 });
+$('ai-use-location').addEventListener('change',()=>{clearOrdinaryDistances();render();});
 $('search').addEventListener('input', () => { clearOrdinaryDistances(); clearAiMode(); render(); });
 $('sort').addEventListener('change', () => { clearOrdinaryDistances(); clearAiMode(); render(); });
 loadButton.addEventListener('click', loadParkingList);
@@ -478,9 +513,11 @@ if (qrInstallVisit && !standalone.matches && navigator.standalone !== true) {
 document.querySelectorAll('[data-search]').forEach(button => {
   button.addEventListener('click', () => {
     $('search').value = button.dataset.search;
+    clearOrdinaryDistances();
     clearAiMode();
     render();
     $('search').focus();
+    if($('ai-use-location').checked)$('search-form').requestSubmit();
   });
 });
 function setView(mode) {
@@ -503,6 +540,7 @@ updateQRLayout();
 function clearAiMode() {
   ordinaryDistanceRequest++;
   ordinaryDistanceMode=false;
+  ordinaryDistanceCodes=new Set();
   aiCodes = null;
   aiRank = new Map();
   aiDistances = new Map();
