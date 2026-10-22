@@ -86,14 +86,18 @@ async function drivingNearby(context,gps,question){
  const successful=settled.filter(r=>r.status==='fulfilled').map(r=>r.value)
    .sort((a,b)=>a.drivingMeters-b.drivingMeters || String(a.parkgcd).localeCompare(String(b.parkgcd)))
    .slice(0,limit);
- if(!successful.length) return json({message:'카카오 자동차 경로를 조회하지 못했습니다. API 권한 또는 주차장 좌표를 확인해 주세요.'},502);
+ // Fill missing slots with clearly labeled unverified candidates, without assigning driving distances.
+ const selected=new Set(successful.map(p=>String(p.parkgcd)));
+ const supplemental=candidates.filter(p=>!selected.has(String(p.parkgcd))).slice(0,Math.max(0,limit-successful.length));
+ const display=[...successful,...supplemental];
+ if(!display.length) return json({message:'표시할 주차장 후보가 없습니다.'},404);
  const failed=settled.filter(r=>r.status==='rejected').length;
- const partial=successful.length<limit||failed>0||verifiedCandidates.length<candidates.length;
- const notice=`근처 후보 ${candidates.length}곳 중 카카오 등록 위치가 검증된 ${verifiedCandidates.length}곳의 자동차 경로를 비교했습니다. 미검증 장소는 제외합니다. 부산 전체 최단거리 순위는 아닙니다.`;
+ const partial=supplemental.length>0||successful.length<limit||failed>0||verifiedCandidates.length<candidates.length;
+ const notice=`주변 후보 ${candidates.length}곳 중 카카오 장소가 확인된 ${verifiedCandidates.length}곳을 자동차 경로로 비교했습니다. 미검증 후보 ${supplemental.length}곳은 뒤에 직선거리 기준으로 표시하며, 자동차 최단거리 순위에 포함하지 않습니다.`;
  return json({
-  answer:`주변 후보 ${candidates.length}곳 중 자동차 주행거리가 짧은 순으로 ${successful.length}곳을 찾았습니다.`,
-  parkingCodes:successful.map(p=>String(p.parkgcd)),
-  parkingResults:successful.map(p=>({code:String(p.parkgcd),name:p.parknm,availableSpaces:p.curravacnt,drivingMeters:p.drivingMeters,drivingSeconds:p.drivingSeconds,verifiedPlace:p.verifiedPlace})),
+  answer:`자동차 경로가 확인된 ${successful.length}곳과 추가 주차장 후보 ${supplemental.length}곳을 찾았습니다.`,
+  parkingCodes:display.map(p=>String(p.parkgcd)),
+  parkingResults:display.map(p=>({code:String(p.parkgcd),name:p.parknm,availableSpaces:p.curravacnt,...(Number.isFinite(p.drivingMeters)?{drivingMeters:p.drivingMeters,drivingSeconds:p.drivingSeconds,verifiedPlace:p.verifiedPlace}:{distanceMeters:p.distanceMeters,locationUnverified:true})})),
   toolsUsed:['findNearbyParking','kakaoDirections'],routeMode:'driving',
   routeStats:{candidates:candidates.length,verified:verifiedCandidates.length,unverified:candidates.length-verifiedCandidates.length,failed,limit:MAX_ROUTE_CANDIDATES},
   notice,partial
