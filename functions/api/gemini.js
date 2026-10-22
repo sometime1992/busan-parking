@@ -79,6 +79,19 @@ export async function drivingNearby(context,gps,question,selectedCodes=null){
   }
  }));
  const verifiedCandidates=verified.filter(Boolean);
+ // If POI/address matching failed for every candidate, make one non-displayed route
+ // probe to distinguish Directions API permission errors from place-matching errors.
+ if(!verifiedCandidates.length && candidates.length){
+  stats.routeProbeRequests=1;
+  try{
+   await drivingRequest(key,gps,point(candidates[0]));
+   stats.routeProbeOk=1;
+  }catch(error){
+   const category=String(error?.message??'').match(/directionsHttp\d+|directionsResult[-\d]+/)?.[0]
+     ??(error?.name==='TimeoutError'?'routeTimeout':'routeOther');
+   stats[category]=(stats[category]??0)+1;
+  }
+ }
  if(!verifiedCandidates.length)return json({
   answer:'주차장 위치를 충분히 검증하지 못해 자동차 주행거리는 제공하지 않습니다. 대신 공공데이터 기준으로 가까운 후보를 표시합니다.',
   parkingCodes:candidates.slice(0,limit).map(p=>String(p.parkgcd)),
