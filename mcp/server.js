@@ -3,7 +3,8 @@
 import * as search from './tools/searchParking.js';
 import * as availability from './tools/findAvailableParking.js';
 import * as detail from './tools/getParkingDetail.js';
-const toolMap = new Map([search,availability,detail].map(t=>[t.definition.name,t]));
+import * as nearby from './tools/findNearbyParking.js';
+const toolMap = new Map([search,availability,detail,nearby].map(t=>[t.definition.name,t]));
 const protocol='2025-06-18';
 const headers={'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'};
 const reply=(obj,status=200)=>new Response(JSON.stringify(obj),{status,headers});
