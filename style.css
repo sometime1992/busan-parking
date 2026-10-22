@@ -186,3 +186,8 @@ select { display:block; width:100%; margin-top:8px; padding:11px; border:1px sol
 .search-distance-help{font-size:12px;line-height:1.55;margin:10px 0 0;color:#5c7191}
 .search-distance-status{font-size:12px;line-height:1.5;color:#42618e;margin:7px 0 0;overflow-wrap:anywhere}
 .search-distance-status:empty{display:none}
+
+/* Sidebar uses the same GPS preference as AI search; this button is an action, not a second toggle. */
+.search-distance-action{width:100%;border:1px solid #cbdcf8;border-radius:10px;padding:11px 13px;background:#eef4ff;color:#2354bc;font-weight:750;font-size:13px;cursor:pointer;text-align:center;margin:12px 0 0;line-height:1.4}
+.search-distance-action:hover{background:#e1edff}
+.search-distance-action:focus-visible{outline:3px solid #83aaff;outline-offset:2px}
