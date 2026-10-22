@@ -181,3 +181,9 @@ select { display:block; width:100%; margin-top:8px; padding:11px; border:1px sol
 .ai-question-row .ai-voice-button[aria-pressed="true"]{background:#ffe8e8;border-color:#ed9a9a;color:#c72a2a}
 .ai-question-row .ai-voice-button:disabled{opacity:.45;cursor:not-allowed}
 @media(max-width:600px){.ai-question-row{display:grid;grid-template-columns:minmax(0,1fr) 46px;gap:9px}.ai-question-row input{grid-column:1;grid-row:1}.ai-question-row .ai-voice-button{grid-column:2;grid-row:1;width:46px}.ai-question-row #ai-submit{grid-column:1/-1;grid-row:2;width:100%}.ai-distance-grid{gap:7px}.ai-distance-cell{padding:10px}.ai-distance-cell strong{font-size:16px}}
+
+/* Optional current-position distance lookup in ordinary sidebar search */
+.search-distance-toggle{display:flex;gap:8px;align-items:flex-start;cursor:pointer;color:#465f85;font-size:12px;line-height:1.55;margin:12px 0 0;font-weight:600}
+.search-distance-toggle input{flex:0 0 17px;width:17px;height:17px;margin:1px 0 0;accent-color:#2458e6}
+.search-distance-status{font-size:12px;line-height:1.5;color:#42618e;margin:7px 0 0;overflow-wrap:anywhere}
+.search-distance-status:empty{display:none}
