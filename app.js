@@ -192,9 +192,9 @@ function render() {
     const link = element('a', validPoint ? '카카오맵에서 주차장 위치 확인 ↗' : '카카오맵에서 주차장명 검색 ↗', 'map-link');
     const verifiedPlace=(aiCodes?aiVerifiedPlaces:ordinaryVerifiedPlaces).get(String(p.parkgcd));
     const trustedPlaceUrl = typeof verifiedPlace?.placeUrl === 'string' &&
-      /^https?:\\/\\/place\\.map\\.kakao\\.com\\/\\d+$/.test(verifiedPlace.placeUrl);
+      /^https?:\/\/place\.map\.kakao\.com\/\d+$/.test(verifiedPlace.placeUrl);
     const candidatePlaceUrl=typeof p.ownerCandidatePlaceUrl==='string' &&
-      /^https:\\/\\/place\\.map\\.kakao\\.com\\/\\d+$/.test(p.ownerCandidatePlaceUrl)
+      /^https:\/\/place\.map\.kakao\.com\/\d+$/.test(p.ownerCandidatePlaceUrl)
       ?p.ownerCandidatePlaceUrl:null;
     link.href = trustedPlaceUrl ? verifiedPlace.placeUrl : candidatePlaceUrl
       || `https://map.kakao.com/link/search/${encodeURIComponent('부산 '+label+' 공영주차장')}`;
