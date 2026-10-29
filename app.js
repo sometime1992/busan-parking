@@ -12,6 +12,7 @@ let aiCodes = null;
 let aiRank = new Map();
 let aiDistances = new Map();
 let aiStraightBasis = new Map();
+let aiDistanceResults = new Map();
 let aiDriving = new Map();
 let aiVerifiedPlaces = new Map();
 let ordinaryDistanceMode = false;
@@ -135,7 +136,7 @@ function render() {
       const code=String(p.parkgcd);
       const straight=(useAi?aiDistances:ordinaryDistances).get(code);
       const basis=(useAi?aiStraightBasis:ordinaryStraightBasis).get(code);
-      const routeResult=useAi?null:ordinaryDistanceResults.get(code);
+      const routeResult=(useAi?aiDistanceResults:ordinaryDistanceResults).get(code);
       const unrequested=!useAi&&!ordinaryRequestedCodes.has(code);
       const distanceBox=element('div',undefined,'ai-distance-grid');
       const car=element('div',undefined,'ai-distance-cell');
@@ -700,6 +701,7 @@ aiForm.addEventListener('submit', async event => {
       activateAiResults(matched);
       aiDistances=new Map((result.parkingResults??[]).filter(p=>Number.isFinite(p.distanceMeters)).map(p=>[String(p.code),p.distanceMeters]));
       aiStraightBasis=new Map((result.parkingResults??[]).map(p=>[String(p.code),p.straightBasis||'public']));
+      aiDistanceResults=new Map((result.parkingResults??[]).map(p=>[String(p.code),p]));
       aiDriving=new Map((result.parkingResults??[]).filter(p=>Number.isFinite(p.drivingMeters)&&Number.isFinite(p.drivingSeconds)).map(p=>[String(p.code),p]));
       aiVerifiedPlaces=new Map((result.parkingResults??[]).filter(p=>p.verifiedPlace).map(p=>[String(p.code),p.verifiedPlace]));
       render();
