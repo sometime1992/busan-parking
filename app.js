@@ -24,6 +24,9 @@ let ordinaryDistances = new Map();
 let ordinaryDriving = new Map();
 let ordinaryVerifiedPlaces = new Map();
 let ordinaryDistanceRequest = 0;
+let ordinaryLocation = null;
+let ordinaryNextCodes = [];
+let ordinaryDistanceBusy = false;
 const openDetails = new Set();
 const mobileRefresh = $('mobile-refresh');
 const mobileRefreshLabel = $('mobile-refresh-label');
@@ -317,9 +320,21 @@ async function loadParkingList() {
     parkingList.setAttribute('aria-busy','false');
   }
 }
+function updateDistanceMoreButton(){
+ const button=$('search-distance-more');
+ if(!button)return;
+ button.hidden=!ordinaryDistanceMode||(!ordinaryNextCodes.length&&!ordinaryDistanceBusy);
+ button.disabled=ordinaryDistanceBusy;
+ button.textContent=ordinaryDistanceBusy?'자동차 주행거리 조회 중…':
+   '다음 '+Math.min(10,ordinaryNextCodes.length)+'곳 자동차 거리 조회 (남은 '+ordinaryNextCodes.length+'곳)';
+}
 function clearOrdinaryDistances(){
  ordinaryDistanceRequest++;
  ordinaryDistanceMode=false;
+ ordinaryLocation=null;
+ ordinaryNextCodes=[];
+ ordinaryDistanceBusy=false;
+ updateDistanceMoreButton();
  ordinaryDistanceCodes=new Set();
  ordinaryRequestedCodes=new Set();
  ordinaryDistanceResults=new Map();
@@ -371,8 +386,11 @@ $('search-form').addEventListener('submit',async event=>{
      const pt=publicDataPoint(p);
      return pt?straightMeters({lat:location.latitude,lng:location.longitude},pt):Infinity;
    };
-   const requested=selected.slice().sort((a,b)=>pointDistance(a)-pointDistance(b))
-     .slice(0,10);
+   const ordered=selected.slice().sort((a,b)=>pointDistance(a)-pointDistance(b));
+   const requested=ordered.slice(0,10);
+   ordinaryLocation=location;
+   ordinaryNextCodes=ordered.slice(10).map(p=>String(p.parkgcd));
+   ordinaryDistanceBusy=true;
    ordinaryRequestedCodes=new Set(requested.map(p=>String(p.parkgcd)));
    ordinaryDistanceCodes=new Set(selected.map(p=>String(p.parkgcd)));
    ordinaryDistances=new Map(selected.flatMap(p=>{
@@ -381,6 +399,7 @@ $('search-form').addEventListener('submit',async event=>{
    }));
    ordinaryStraightBasis=new Map([...ordinaryDistances.keys()].map(code=>[code,'public']));
    ordinaryDistanceMode=true;
+   updateDistanceMoreButton();
    render();
    status.textContent='직선거리 '+ordinaryDistances.size+'곳 확인 · 자동차 주행거리를 조회하고 있습니다. (자동차 경로는 최대 10곳)';
    let result;
@@ -394,10 +413,14 @@ $('search-form').addEventListener('submit',async event=>{
      if(!response.ok)throw Error(result.message||'자동차 경로 조회에 실패했습니다.');
    }catch(error){
      if(id!==ordinaryDistanceRequest)return;
+     ordinaryDistanceBusy=false;
+     updateDistanceMoreButton();
      status.textContent='직선거리 '+ordinaryDistances.size+'곳 표시 중 · 자동차 경로 '+(error.name==='TimeoutError'?'시간 초과':error.message);
      return;
    }
    if(id!==ordinaryDistanceRequest)return;
+   ordinaryDistanceBusy=false;
+   updateDistanceMoreButton();
    const results=Array.isArray(result.parkingResults)?result.parkingResults:[];
    ordinaryDriving=new Map(results.filter(p=>ordinaryDistanceCodes.has(String(p.code))&&Number.isFinite(p.drivingMeters)&&Number.isFinite(p.drivingSeconds)).map(p=>[String(p.code),p]));
    ordinaryDistanceResults=new Map(results.map(p=>[String(p.code),p]));
@@ -414,7 +437,57 @@ $('search-form').addEventListener('submit',async event=>{
    render();
  }catch(error){
    if(id!==ordinaryDistanceRequest)return;
+   ordinaryDistanceBusy=false;
+   updateDistanceMoreButton();
    status.textContent=error.code===1?'위치 권한이 거부되었습니다. 브라우저 위치 접근을 허용해 주세요.':error.name==='TimeoutError'||error.code===3?'GPS 위치 조회 시간이 초과되었습니다.':error.message;
+ }
+});
+$('search-distance-more').addEventListener('click',async()=>{
+ if(ordinaryDistanceBusy||!ordinaryDistanceMode||!ordinaryLocation||!ordinaryNextCodes.length)return;
+ const id=ordinaryDistanceRequest, batch=ordinaryNextCodes.slice(0,10);
+ const status=$('search-distance-status');
+ ordinaryDistanceBusy=true;
+ updateDistanceMoreButton();
+ status.textContent='추가 주차장 '+batch.length+'곳의 자동차 경로를 조회 중입니다.';
+ try{
+  const response=await fetch('/api/distances',{
+   method:'POST',headers:{'Content-Type':'application/json'},
+   body:JSON.stringify({location:ordinaryLocation,parkingCodes:batch}),
+   cache:'no-store',signal:AbortSignal.timeout(55000)
+  });
+  const result=await response.json();
+  if(!response.ok)throw Error(result.message||'추가 거리 조회 실패');
+  if(id!==ordinaryDistanceRequest)return;
+  ordinaryNextCodes.splice(0,batch.length);
+  for(const code of batch)ordinaryRequestedCodes.add(code);
+  const results=Array.isArray(result.parkingResults)?result.parkingResults:[];
+  for(const p of results){
+   const code=String(p.code);
+   if(!ordinaryDistanceCodes.has(code))continue;
+   ordinaryDistanceResults.set(code,p);
+   if(Number.isFinite(p.drivingMeters)&&Number.isFinite(p.drivingSeconds))
+    ordinaryDriving.set(code,p);
+   if(p.verifiedPlace)ordinaryVerifiedPlaces.set(code,p.verifiedPlace);
+   if(Number.isFinite(p.distanceMeters)){
+    ordinaryDistances.set(code,p.distanceMeters);
+    ordinaryStraightBasis.set(code,p.straightBasis||'public');
+   }
+  }
+  const references=[...ordinaryDriving.values()].filter(p=>p.routeBasis==='public').length;
+  status.textContent='자동차 주행거리 '+ordinaryDriving.size+'곳 · 직선거리 '+ordinaryDistances.size+
+   '곳 · 남은 미조회 '+ordinaryNextCodes.length+'곳'+(references?' · 참고용 '+references+'곳':'');
+  const failure=routeErrorMessage(result.routeDiagnostics);
+  if(failure)status.textContent+=' · '+failure;
+  render();
+ }catch(error){
+  if(id!==ordinaryDistanceRequest)return;
+  status.textContent='추가 조회 실패: '+(error.name==='TimeoutError'?'시간 초과':error.message)+
+   ' · 다시 누르면 동일한 '+batch.length+'곳을 재시도합니다.';
+ }finally{
+  if(id===ordinaryDistanceRequest){
+   ordinaryDistanceBusy=false;
+   updateDistanceMoreButton();
+  }
  }
 });
 $('ai-use-location').addEventListener('change',()=>{clearOrdinaryDistances();render();});
