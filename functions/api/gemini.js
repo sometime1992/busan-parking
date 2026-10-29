@@ -101,11 +101,12 @@ export async function drivingNearby(context,gps,question,selectedCodes=null){
  // Do not merge distinct public parking codes onto one Kakao place id.
  const usedIds=new Map();
  for(const p of found){
-  const id=p?.verifiedPlace?.placeId;
+  const id=p?.verifiedPlace?.placeId||p?.verifiedPlace?.placeUrl;
   if(id)usedIds.set(id,(usedIds.get(id)??0)+1);
  }
  for(const p of found){
-  if(!p?.verifiedPlace?.placeId||usedIds.get(p.verifiedPlace.placeId)<=1)continue;
+  const id=p?.verifiedPlace?.placeId||p?.verifiedPlace?.placeUrl;
+  if(!id||usedIds.get(id)<=1)continue;
   stats.duplicatePlaceIds=(stats.duplicatePlaceIds??0)+1;
   const original=point(p);
   p.verifiedPlace=null;
