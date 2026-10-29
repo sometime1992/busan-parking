@@ -4,6 +4,7 @@ import { mergeParkingData } from '../../lib/mergeParkingData.js';
 import { fetchParkingList } from '../../lib/fetchParkingList.js';
 import { fetchRealtime } from '../../lib/fetchRealtime.js';
 import { fetchBasicInfo } from '../../lib/fetchBasicInfo.js';
+import { suppliedPlaceFor } from '../../lib/suppliedParkingPlaces.js';
 
 function json(body, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } });
@@ -38,7 +39,10 @@ export async function onRequestGet(context) {
     warnings.push(i === 1 ? '실시간 현황 조회에 실패했습니다. 빈자리는 확인 불가로 표시합니다.' : '부산시 기본정보 조회에 실패했습니다. 활용승인·인증키·호출한도를 확인해 주세요.');
     return [];
   });
-  const all = mergeParkingData(...sets);
+  const all = mergeParkingData(...sets).map(p => {
+    const supplied = suppliedPlaceFor(p);
+    return supplied ? { ...p, ownerCandidatePlaceUrl: supplied.placeUrl } : p;
+  });
   const matchedCount = all.filter(x => x.basicMatched).length;
   const query = normalizeName(new URL(context.request.url).searchParams.get('name') ?? '');
   const parkingList = query ? all.filter(x => normalizeName(x.parknm).includes(query) || normalizeName(x.pkNam).includes(query)) : all;
