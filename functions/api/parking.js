@@ -5,6 +5,7 @@ import { fetchParkingList } from '../../lib/fetchParkingList.js';
 import { fetchRealtime } from '../../lib/fetchRealtime.js';
 import { fetchBasicInfo } from '../../lib/fetchBasicInfo.js';
 import { suppliedPlaceFor } from '../../lib/suppliedParkingPlaces.js';
+import { mappedParkingPlace } from '../../lib/verifiedParkingLocations.js';
 
 function json(body, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } });
@@ -41,7 +42,24 @@ export async function onRequestGet(context) {
   });
   const all = mergeParkingData(...sets).map(p => {
     const supplied = suppliedPlaceFor(p);
-    return supplied ? { ...p, ownerCandidatePlaceUrl: supplied.placeUrl } : p;
+    const verified = mappedParkingPlace(p);
+    // CSV 2026-04-15 (national parking standard, Busan Buk-gu,
+    // facility 137-2-000004): matches existing official record name and
+    // parcel 2126. Do not transfer this coordinate to other '화명' sites.
+    const std = String(p.parkgcd)==='A21' &&
+      /화명/.test(String(p.pkNam??'')) &&
+      /화명(?:2)?동\s*2126/.test(String(p.jibunAddr??''))
+      ? { lat:35.238036, lng:129.017135 } : null;
+    const coordinates=verified??std;
+    return {
+      ...p,
+      ...(supplied?{ownerCandidatePlaceUrl:supplied.placeUrl}:{}),
+      ...(coordinates?{
+        xCdnt:String(coordinates.lng),
+        yCdnt:String(coordinates.lat),
+        coordinateSource:verified?'kakao_verified_place_pin':'national_standard'
+      }:{})
+    };
   });
   const matchedCount = all.filter(x => x.basicMatched).length;
   const query = normalizeName(new URL(context.request.url).searchParams.get('name') ?? '');
