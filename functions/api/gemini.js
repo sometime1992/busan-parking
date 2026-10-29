@@ -5,7 +5,7 @@ import * as free from '../../mcp/tools/findAvailableParking.js';
 import * as detail from '../../mcp/tools/getParkingDetail.js';
 import * as nearby from '../../mcp/tools/findNearbyParking.js';
 import {getParking} from '../../mcp/tools/data.js';
-import {nearby as nearest,point} from '../../lib/nearbyParking.js';
+import {nearby as nearest,point,distanceMeters} from '../../lib/nearbyParking.js';
 import {verifyParkingPlace} from '../../lib/verifyParkingPlace.js';
 import {mappedParkingPlace} from '../../lib/verifiedParkingLocations.js';
 import {geocodeParkingAddress} from '../../lib/geocodeParkingAddress.js';
@@ -56,76 +56,100 @@ async function boundedRoutes(candidates,key,gps,stats){
 }
 export async function drivingNearby(context,gps,question,selectedCodes=null){
  const key=String(context.env.KAKAO_REST_API_KEY??'').trim();
- if(!key) return json({message:'KAKAO_REST_API_KEY 등록 후 다시 배포해 주세요.'},503);
- const limit=requestedCount(question);
- const stats={};
+ if(!key)return json({message:'KAKAO_REST_API_KEY 등록 후 다시 배포해 주세요.'},503);
+ const limit=requestedCount(question),stats={};
  const list=await getParking(context);
- // 후보는 직선거리로만 1차 선별합니다. 최종 순위는 반드시 실제 자동차 경로로 계산합니다.
- const source=Array.isArray(selectedCodes)?list.parkingList.filter(p=>selectedCodes.includes(String(p.parkgcd))):list.parkingList;
+ const explicit=Array.isArray(selectedCodes);
+ const source=explicit?list.parkingList.filter(p=>selectedCodes.includes(String(p.parkgcd))):list.parkingList;
  const located=nearest(source,gps.latitude,gps.longitude,{
-  limit:MAX_ROUTE_CANDIDATES,radius:Array.isArray(selectedCodes)?600000:20000,
-  onlyAvailable:Array.isArray(selectedCodes)?false:!(/빈자리 상관없이|만차도|전체 주차장/.test(question))
+  limit:MAX_ROUTE_CANDIDATES,radius:explicit?600000:20000,
+  onlyAvailable:explicit?false:!(/빈자리 상관없이|만차도|전체 주차장/.test(question))
  });
- // An explicit ordinary-search selection can still be routed by a uniquely
- // verified Kakao place/address even when public data has no valid WGS84 point.
- // Never add such unlocated lots to "nearest" AI ranking.
- const unlocated=Array.isArray(selectedCodes)?source.filter(p=>!point(p))
+ // Auto-nearby rankings require a real location. Explicitly chosen facilities
+ // can also be resolved by an independently matching official full address.
+ const unlocated=explicit?source.filter(p=>!point(p))
   .map(p=>({...p,distanceMeters:null})):[];
  const candidates=[...located,...unlocated].slice(0,MAX_ROUTE_CANDIDATES);
  stats.sourceCoordinatesMissing=unlocated.length;
- if(!candidates.length) return json({answer:'GPS 좌표와 주차장 좌표가 확인되는 주변 주차장을 찾지 못했습니다.',parkingCodes:[],parkingResults:[],toolsUsed:['findNearbyParking'],routeMode:'driving'});
- // Match against Kakao's registered parking places; never route to unverified source coordinates.
- const verified=new Array(candidates.length).fill(null);
- let verifyIndex=0;
- await Promise.all(Array.from({length:Math.min(5,candidates.length)},async()=>{
-  while(verifyIndex<candidates.length){
-   const i=verifyIndex++;
-   const p=candidates[i];
-   try{const place=mappedParkingPlace(p)??await verifyParkingPlace(p,key,context,stats)??await geocodeParkingAddress(p,key,stats);if(place)verified[i]={...p,verifiedPlace:place};}
-   catch{/* 카카오 장소 미확인: 공공데이터 좌표로 길찾기를 강행하지 않습니다. */}
+ if(!candidates.length)return json({
+  answer:'현재 위치 주변에서 좌표가 확인되는 공영주차장을 찾지 못했습니다.',
+  parkingCodes:[],parkingResults:[],routeMode:'unverified',
+  routeDiagnostics:stats,toolsUsed:['findNearbyParking']
+ });
+ const found=new Array(candidates.length).fill(null);
+ let next=0;
+ await Promise.all(Array.from({length:Math.min(4,candidates.length)},async()=>{
+  while(next<candidates.length){
+   const i=next++,p=candidates[i],publicPoint=point(p);
+   try{
+    const place=mappedParkingPlace(p)
+     ??await verifyParkingPlace(p,key,context,stats)
+     ??(!publicPoint?await geocodeParkingAddress(p,key,stats):null);
+    found[i]={...p,verifiedPlace:place??null,
+     destination:place??(publicPoint?{...publicPoint,name:p.parknm,source:'public_point'}:null),
+     straightBasis:Number.isFinite(p.distanceMeters)?'public':place?'verified_location':null,
+     distanceMeters:Number.isFinite(p.distanceMeters)?p.distanceMeters:
+       place?Math.round(distanceMeters(gps.latitude,gps.longitude,place.lat,place.lng)):null};
+   }catch{
+    stats.locationOther=(stats.locationOther??0)+1;
+    found[i]={...p,verifiedPlace:null,
+     destination:publicPoint?{...publicPoint,name:p.parknm,source:'public_point'}:null,
+     straightBasis:publicPoint?'public':null};
+   }
   }
  }));
- const verifiedCandidates=verified.filter(Boolean);
- // If POI/address matching failed for every candidate, make one non-displayed route
- // probe to distinguish Directions API permission errors from place-matching errors.
- if(!verifiedCandidates.length && candidates.length){
-  stats.routeProbeRequests=1;
-  try{
-   await drivingRequest(key,gps,point(candidates[0]));
-   stats.routeProbeOk=1;
-  }catch(error){
-   const category=String(error?.message??'').match(/directionsHttp\d+|directionsResult[-\d]+/)?.[0]
-     ??(error?.name==='TimeoutError'?'routeTimeout':'routeOther');
-   stats[category]=(stats[category]??0)+1;
-  }
+ // Do not merge distinct public parking codes onto one Kakao place id.
+ const usedIds=new Map();
+ for(const p of found){
+  const id=p?.verifiedPlace?.placeId;
+  if(id)usedIds.set(id,(usedIds.get(id)??0)+1);
  }
- if(!verifiedCandidates.length)return json({
-  answer:'주차장 위치를 충분히 검증하지 못해 자동차 주행거리는 제공하지 않습니다. 대신 공공데이터 기준으로 가까운 후보를 표시합니다.',
-  parkingCodes:candidates.slice(0,limit).map(p=>String(p.parkgcd)),
-  parkingResults:candidates.slice(0,limit).map(p=>({code:String(p.parkgcd),name:p.parknm,availableSpaces:p.curravacnt,distanceMeters:p.distanceMeters,locationUnverified:true})),
-  toolsUsed:['findNearbyParking','kakaoLocal'],routeMode:'unverified',
-  notice:'자동차 주행거리는 목적지를 확인하지 못해 표시하지 않습니다. 직선거리는 공공데이터 대표 좌표를 기준으로 계산하므로 실제 주차장 입구와 다를 수 있습니다.',
-  partial:true,routeDiagnostics:stats
- });
- const settled=await boundedRoutes(verifiedCandidates,key,gps,stats);
+ for(const p of found){
+  if(!p?.verifiedPlace?.placeId||usedIds.get(p.verifiedPlace.placeId)<=1)continue;
+  stats.duplicatePlaceIds=(stats.duplicatePlaceIds??0)+1;
+  const original=point(p);
+  p.verifiedPlace=null;
+  p.destination=original?{...original,name:p.parknm,source:'public_point'}:null;
+ }
+ const eligible=found.filter(p=>p?.destination);
+ stats.matchedPlaces=eligible.filter(p=>p.verifiedPlace?.source==='kakao_verified'||p.verifiedPlace?.source==='manual_verified').length;
+ stats.addressLocations=eligible.filter(p=>p.destination.source==='address_geocoded').length;
+ stats.publicPointFallbacks=eligible.filter(p=>p.destination.source==='public_point').length;
+ const settled=await boundedRoutes(eligible,key,gps,stats);
  const successful=settled.filter(r=>r.status==='fulfilled').map(r=>r.value)
-   .sort((a,b)=>a.drivingMeters-b.drivingMeters || String(a.parkgcd).localeCompare(String(b.parkgcd)))
-   .slice(0,limit);
- // Fill missing slots with clearly labeled unverified candidates, without assigning driving distances.
- const selected=new Set(successful.map(p=>String(p.parkgcd)));
- const supplemental=candidates.filter(p=>!selected.has(String(p.parkgcd))).slice(0,Math.max(0,limit-successful.length));
- const display=[...successful,...supplemental];
- if(!display.length) return json({message:'표시할 주차장 후보가 없습니다.'},404);
+  .sort((a,b)=>a.drivingMeters-b.drivingMeters||String(a.parkgcd).localeCompare(String(b.parkgcd)))
+  .slice(0,limit);
+ const succeeded=new Set(successful.map(p=>String(p.parkgcd)));
+ const supplemental=found.filter(p=>!succeeded.has(String(p.parkgcd)))
+  .slice(0,Math.max(0,limit-successful.length));
+ const selected=[...successful,...supplemental];
  const failed=settled.filter(r=>r.status==='rejected').length;
- const partial=supplemental.length>0||successful.length<limit||failed>0||verifiedCandidates.length<candidates.length;
- const notice=`주변 후보 ${candidates.length}곳 중 목적지 좌표를 확인한 ${verifiedCandidates.length}곳의 자동차 경로를 계산했습니다. 주소 기준 거리는 주차장 진입로까지의 거리와 다를 수 있습니다. 미확인 후보 ${supplemental.length}곳은 공공데이터 기준 직선거리만 표시합니다.`;
+ const reference=successful.filter(p=>p.destination?.source==='public_point').length;
+ const missing=found.filter(p=>!p?.destination).length;
+ const answer='자동차 주행거리 '+successful.length+'곳을 계산했습니다.'
+  +(reference?' 이 중 '+reference+'곳은 공공데이터 대표 좌표 기준 참고용입니다.':'')
+  +(supplemental.length?' 추가 후보 '+supplemental.length+'곳은 자동차 경로를 확인하지 못했습니다.':'');
+ const notice='카카오 장소 기준 경로는 실제 차량 진입구와 다를 수 있습니다. '
+  +'공공데이터 대표 좌표 또는 주소 기준 거리는 진입로까지의 정확한 거리가 아닌 참고용입니다.';
  return json({
-  answer:`자동차 경로가 확인된 ${successful.length}곳과 추가 주차장 후보 ${supplemental.length}곳을 찾았습니다.`,
-  parkingCodes:display.map(p=>String(p.parkgcd)),
-  parkingResults:display.map(p=>({code:String(p.parkgcd),name:p.parknm,availableSpaces:p.curravacnt,distanceMeters:p.distanceMeters,...(Number.isFinite(p.drivingMeters)?{drivingMeters:p.drivingMeters,drivingSeconds:p.drivingSeconds,verifiedPlace:p.verifiedPlace,routeBasis:p.verifiedPlace?.source==='address_geocoded'?'address':'place'}  :{locationUnverified:true})})),
-  toolsUsed:['findNearbyParking','kakaoDirections'],routeMode:'driving',
-  routeStats:{candidates:candidates.length,verified:verifiedCandidates.length,unverified:candidates.length-verifiedCandidates.length,failed,limit:MAX_ROUTE_CANDIDATES},
-  notice,partial,routeDiagnostics:stats
+  answer,parkingCodes:selected.map(p=>String(p.parkgcd)),
+  parkingResults:selected.map(p=>{
+   const routeBasis=p.destination?.source==='public_point'?'public':
+    p.destination?.source==='address_geocoded'?'address':'place';
+   return {code:String(p.parkgcd),name:p.parknm,availableSpaces:p.curravacnt,
+    distanceMeters:Number.isFinite(p.distanceMeters)?p.distanceMeters:null,
+    straightBasis:p.straightBasis??null,
+    ...(Number.isFinite(p.drivingMeters)
+     ?{drivingMeters:p.drivingMeters,drivingSeconds:p.drivingSeconds,
+       routeBasis,...(p.verifiedPlace?{verifiedPlace:p.verifiedPlace}:{})}
+     :{locationUnverified:true,routeStatus:p.destination?'route_failed':'location_unverified'})};
+  }),
+  toolsUsed:['findNearbyParking','kakaoLocal','kakaoDirections'],
+  routeMode:successful.length?'driving':'unverified',
+  routeStats:{candidates:candidates.length,verified:eligible.length,
+   unverified:missing,failed,reference,limit:MAX_ROUTE_CANDIDATES},
+  routeDiagnostics:stats,notice,
+  partial:!!(supplemental.length||failed||missing)
  });
 }
 
