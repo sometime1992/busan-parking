@@ -78,8 +78,10 @@ function date(text) {
 function routeErrorMessage(stats){
  if(!stats||typeof stats!=='object')return '';
  const total=key=>Object.entries(stats).filter(([k])=>k.endsWith(key)).reduce((sum,[,v])=>sum+(Number(v)||0),0);
- if(total('Http401')||total('Http403'))
-   return '카카오 API 인증 또는 사용 권한 오류(401/403)가 감지되었습니다. 카카오 개발자 설정과 Cloudflare의 KAKAO_REST_API_KEY를 확인해 주세요.';
+ if(stats.directionsHttp401||stats.directionsHttp403)
+   return '카카오모빌리티 자동차 길찾기 API가 401/403을 반환했습니다. 길찾기 API 이용 권한과 Cloudflare의 KAKAO_REST_API_KEY를 확인해 주세요. 장소 좌표만 수정해도 이 오류는 해결되지 않습니다.';
+ if(stats.localHttp401||stats.localHttp403||stats.geocodeHttp401||stats.geocodeHttp403)
+   return '카카오 로컬 장소·주소 검색 API가 401/403을 반환했습니다. 카카오 앱의 로컬 API 호출 권한과 Cloudflare 키 설정을 확인해 주세요.';
  if(total('Http429'))return '카카오 API 요청 제한(429)이 감지되었습니다. 요청량·쿼터를 확인해 주세요.';
  const routeCodes=Object.keys(stats).filter(k=>k.startsWith('directionsResult')&&stats[k]>0);
  if(routeCodes.length)return '카카오 자동차 길찾기에서 경로를 찾지 못한 요청이 있습니다('+routeCodes.join(', ')+'). 목적지 좌표를 확인해 주세요.';
