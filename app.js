@@ -11,10 +11,14 @@ let activeFilter = 'all';
 let aiCodes = null;
 let aiRank = new Map();
 let aiDistances = new Map();
+let aiStraightBasis = new Map();
 let aiDriving = new Map();
 let aiVerifiedPlaces = new Map();
 let ordinaryDistanceMode = false;
 let ordinaryDistanceCodes = new Set();
+let ordinaryRequestedCodes = new Set();
+let ordinaryDistanceResults = new Map();
+let ordinaryStraightBasis = new Map();
 let ordinaryDistances = new Map();
 let ordinaryDriving = new Map();
 let ordinaryVerifiedPlaces = new Map();
@@ -128,25 +132,34 @@ function render() {
     if(aiCodes?.has(String(p.parkgcd)) || (ordinaryDistanceMode && ordinaryDistanceCodes.has(String(p.parkgcd)))) {
       const useAi=Boolean(aiCodes?.has(String(p.parkgcd)));
       const driving=(useAi?aiDriving:ordinaryDriving).get(String(p.parkgcd));
-      const straight=(useAi?aiDistances:ordinaryDistances).get(String(p.parkgcd));
+      const code=String(p.parkgcd);
+      const straight=(useAi?aiDistances:ordinaryDistances).get(code);
+      const basis=(useAi?aiStraightBasis:ordinaryStraightBasis).get(code);
+      const routeResult=useAi?null:ordinaryDistanceResults.get(code);
+      const unrequested=!useAi&&!ordinaryRequestedCodes.has(code);
       const distanceBox=element('div',undefined,'ai-distance-grid');
       const car=element('div',undefined,'ai-distance-cell');
       car.append(element('span','자동차 주행거리','ai-distance-label'));
       if(driving) {
-        car.append(element('strong',driving.drivingMeters<1000?`${driving.drivingMeters}m`:`${(driving.drivingMeters/1000).toFixed(1)}km`));
-        car.append(element('small',`예상 약 ${Math.max(1,Math.ceil(driving.drivingSeconds/60))}분${driving.routeBasis==='address'?' · 주소 기준':''}`));
+        const distance=driving.drivingMeters<1000?driving.drivingMeters+'m':(driving.drivingMeters/1000).toFixed(1)+'km';
+        car.append(element('strong',distance));
+        const note=driving.routeBasis==='public'?' · 대표 좌표 기준 · 참고용':
+          driving.routeBasis==='address'?' · 주소 기준 · 참고용':' · 카카오 장소 기준';
+        car.append(element('small','예상 약 '+Math.max(1,Math.ceil(driving.drivingSeconds/60))+'분'+note));
       } else {
-        car.append(element('strong','확인 불가'));
-        car.append(element('small','자동차 경로 미확인'));
+        car.append(element('strong',unrequested?'미조회':'확인 불가'));
+        car.append(element('small',unrequested?'첫 10곳 외 자동차 경로 미조회':
+          routeResult?.routeStatus==='route_failed'?'자동차 경로 탐색 실패':
+          '차량 목적지 확인 필요'));
       }
       const line=element('div',undefined,'ai-distance-cell');
       line.append(element('span','직선거리','ai-distance-label'));
       if(Number.isFinite(straight)){
-        line.append(element('strong',straight<1000?`${straight}m`:`${(straight/1000).toFixed(1)}km`));
-        line.append(element('small','공공데이터 좌표 기준'));
+        line.append(element('strong',straight<1000?straight+'m':(straight/1000).toFixed(1)+'km'));
+        line.append(element('small',basis==='verified_location'?'검증된 장소 좌표 기준':'공공데이터 좌표 기준'));
       } else {
         line.append(element('strong','확인 불가'));
-        line.append(element('small','GPS·좌표 확인 필요'));
+        line.append(element('small','목적지 좌표 확인 필요'));
       }
       distanceBox.append(car,line);
       card.append(distanceBox);
@@ -299,6 +312,9 @@ function clearOrdinaryDistances(){
  ordinaryDistanceRequest++;
  ordinaryDistanceMode=false;
  ordinaryDistanceCodes=new Set();
+ ordinaryRequestedCodes=new Set();
+ ordinaryDistanceResults=new Map();
+ ordinaryStraightBasis=new Map();
  ordinaryDistances=new Map();
  ordinaryDriving=new Map();
  ordinaryVerifiedPlaces=new Map();
@@ -334,8 +350,7 @@ $('search-form').addEventListener('submit',async event=>{
  selected.sort((a,b)=>$('sort').value==='available'
    ?((known(b)?b.curravacnt:-1)-(known(a)?a.curravacnt:-1)||String(a.parknm).localeCompare(String(b.parknm),'ko'))
    :String(a.parknm).localeCompare(String(b.parknm),'ko'));
- const requested=selected.slice(0,10);
- if(!requested.length){status.textContent='검색 조건에 맞는 주차장이 없습니다.';return;}
+ if(!selected.length){status.textContent='검색 조건에 맞는 주차장이 없습니다.';return;}
  try{
    status.textContent='현재 GPS 위치를 확인하고 있습니다.';
    if(!navigator.geolocation)throw Error('이 브라우저는 위치 기능을 지원하지 않습니다.');
@@ -343,11 +358,19 @@ $('search-form').addEventListener('submit',async event=>{
    if(id!==ordinaryDistanceRequest)return;
    const location={latitude:pos.coords.latitude,longitude:pos.coords.longitude};
    if(!Number.isFinite(location.latitude)||!Number.isFinite(location.longitude))throw Error('위치 좌표를 확인하지 못했습니다.');
+   const pointDistance=p=>{
+     const pt=publicDataPoint(p);
+     return pt?straightMeters({lat:location.latitude,lng:location.longitude},pt):Infinity;
+   };
+   const requested=selected.slice().sort((a,b)=>pointDistance(a)-pointDistance(b))
+     .slice(0,10);
+   ordinaryRequestedCodes=new Set(requested.map(p=>String(p.parkgcd)));
    ordinaryDistanceCodes=new Set(selected.map(p=>String(p.parkgcd)));
    ordinaryDistances=new Map(selected.flatMap(p=>{
      const coords=publicDataPoint(p);
      return coords?[[String(p.parkgcd),straightMeters({lat:location.latitude,lng:location.longitude},coords)]]:[];
    }));
+   ordinaryStraightBasis=new Map([...ordinaryDistances.keys()].map(code=>[code,'public']));
    ordinaryDistanceMode=true;
    render();
    status.textContent='직선거리 '+ordinaryDistances.size+'곳 확인 · 자동차 주행거리를 조회하고 있습니다. (자동차 경로는 최대 10곳)';
@@ -368,8 +391,15 @@ $('search-form').addEventListener('submit',async event=>{
    if(id!==ordinaryDistanceRequest)return;
    const results=Array.isArray(result.parkingResults)?result.parkingResults:[];
    ordinaryDriving=new Map(results.filter(p=>ordinaryDistanceCodes.has(String(p.code))&&Number.isFinite(p.drivingMeters)&&Number.isFinite(p.drivingSeconds)).map(p=>[String(p.code),p]));
+   ordinaryDistanceResults=new Map(results.map(p=>[String(p.code),p]));
+   for(const p of results)if(ordinaryDistanceCodes.has(String(p.code))&&Number.isFinite(p.distanceMeters)){
+     ordinaryDistances.set(String(p.code),p.distanceMeters);
+     ordinaryStraightBasis.set(String(p.code),p.straightBasis||'public');
+   }
    ordinaryVerifiedPlaces=new Map(results.filter(p=>ordinaryDistanceCodes.has(String(p.code))&&p.verifiedPlace).map(p=>[String(p.code),p.verifiedPlace]));
    status.textContent='자동차 주행거리 '+ordinaryDriving.size+'곳 · 직선거리 '+ordinaryDistances.size+'곳 표시 중';
+   const references=[...ordinaryDriving.values()].filter(p=>p.routeBasis==='public').length;
+   if(references)status.textContent+=' · 대표 좌표 기준 참고용 '+references+'곳';
    const failure=routeErrorMessage(result.routeDiagnostics);
    if(failure)status.textContent+=' · '+failure;
    render();
@@ -669,6 +699,7 @@ aiForm.addEventListener('submit', async event => {
     if(matched.length) {
       activateAiResults(matched);
       aiDistances=new Map((result.parkingResults??[]).filter(p=>Number.isFinite(p.distanceMeters)).map(p=>[String(p.code),p.distanceMeters]));
+      aiStraightBasis=new Map((result.parkingResults??[]).map(p=>[String(p.code),p.straightBasis||'public']));
       aiDriving=new Map((result.parkingResults??[]).filter(p=>Number.isFinite(p.drivingMeters)&&Number.isFinite(p.drivingSeconds)).map(p=>[String(p.code),p]));
       aiVerifiedPlaces=new Map((result.parkingResults??[]).filter(p=>p.verifiedPlace).map(p=>[String(p.code),p.verifiedPlace]));
       render();
