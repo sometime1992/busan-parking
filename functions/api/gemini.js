@@ -32,7 +32,7 @@ const drivingRequest=async(key,origin,destination)=>{
  if(route?.result_code!==0 || !Number.isFinite(route?.summary?.distance) || !Number.isFinite(route?.summary?.duration)) throw new Error('directionsResult'+String(route?.result_code??'unknown'));
  return {drivingMeters:Math.round(route.summary.distance),drivingSeconds:Math.round(route.summary.duration)};
 };
-// 자동차 경로 요청은 1회 검색당 최대 20건, 동시 최대 5건으로 제한합니다.
+// Limit to 10 candidate destinations per search and 5 concurrent route requests.
 const MAX_ROUTE_CANDIDATES=10;
 const ROUTE_CONCURRENCY=5;
 function requestedCount(question){
@@ -62,10 +62,17 @@ export async function drivingNearby(context,gps,question,selectedCodes=null){
  const list=await getParking(context);
  // 후보는 직선거리로만 1차 선별합니다. 최종 순위는 반드시 실제 자동차 경로로 계산합니다.
  const source=Array.isArray(selectedCodes)?list.parkingList.filter(p=>selectedCodes.includes(String(p.parkgcd))):list.parkingList;
- const candidates=nearest(source,gps.latitude,gps.longitude,{
+ const located=nearest(source,gps.latitude,gps.longitude,{
   limit:MAX_ROUTE_CANDIDATES,radius:Array.isArray(selectedCodes)?600000:20000,
   onlyAvailable:Array.isArray(selectedCodes)?false:!(/빈자리 상관없이|만차도|전체 주차장/.test(question))
  });
+ // An explicit ordinary-search selection can still be routed by a uniquely
+ // verified Kakao place/address even when public data has no valid WGS84 point.
+ // Never add such unlocated lots to "nearest" AI ranking.
+ const unlocated=Array.isArray(selectedCodes)?source.filter(p=>!point(p))
+  .map(p=>({...p,distanceMeters:null})):[];
+ const candidates=[...located,...unlocated].slice(0,MAX_ROUTE_CANDIDATES);
+ stats.sourceCoordinatesMissing=unlocated.length;
  if(!candidates.length) return json({answer:'GPS 좌표와 주차장 좌표가 확인되는 주변 주차장을 찾지 못했습니다.',parkingCodes:[],parkingResults:[],toolsUsed:['findNearbyParking'],routeMode:'driving'});
  // Match against Kakao's registered parking places; never route to unverified source coordinates.
  const verified=new Array(candidates.length).fill(null);
