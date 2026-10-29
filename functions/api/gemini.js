@@ -47,7 +47,7 @@ async function boundedRoutes(candidates,key,gps,stats){
    const i=next++;
    const p=candidates[i];
    if(stats)stats.routeRequests=(stats.routeRequests??0)+1;
-   try {results[i]={status:'fulfilled',value:{...p,...await drivingRequest(key,gps,p.verifiedPlace??point(p))}};if(stats)stats.routeSuccess=(stats.routeSuccess??0)+1;}
+   try {results[i]={status:'fulfilled',value:{...p,...await drivingRequest(key,gps,p.destination)}};if(stats)stats.routeSuccess=(stats.routeSuccess??0)+1;}
    catch(error){results[i]={status:'rejected',reason:error};if(stats){const label=String(error?.message??'').match(/directionsHttp\d+|directionsResult[-\d]+/)?.[0]??(error?.name==='TimeoutError'?'routeTimeout':'routeOther');stats[label]=(stats[label]??0)+1;}}
   }
  }
@@ -110,6 +110,7 @@ export async function drivingNearby(context,gps,question,selectedCodes=null){
   const original=point(p);
   p.verifiedPlace=null;
   p.destination=original?{...original,name:p.parknm,source:'public_point'}:null;
+  if(!original){p.distanceMeters=null;p.straightBasis=null;}
  }
  const eligible=found.filter(p=>p?.destination);
  stats.matchedPlaces=eligible.filter(p=>p.verifiedPlace?.source==='kakao_verified'||p.verifiedPlace?.source==='manual_verified').length;
